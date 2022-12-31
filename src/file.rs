@@ -3,7 +3,16 @@ use std::fs::{File, OpenOptions};
 use std::io::Error;
 use std::path::Path;
 
-pub fn open_file(path: &Path) -> Result<File, Error> {
+use close_file::Closable;
+use fs3::FileExt;
+use memmap2::MmapMut;
+
+pub struct MemoryMappedFile {
+    file: File,
+    pub(crate) data: MmapMut,
+}
+
+pub fn open_file(path: &Path) -> Result<MemoryMappedFile, Error> {
     if !path.is_file() {
         fs::create_dir_all(path.parent().unwrap())?;
     }
@@ -14,5 +23,23 @@ pub fn open_file(path: &Path) -> Result<File, Error> {
         .create(true)
         .open(path)?;
 
-    Ok(file)
+    file.try_lock_exclusive().unwrap();
+
+    let data = unsafe { MmapMut::map_mut(&file) }?;
+
+    data.advise(memmap2::Advice::Random).unwrap();
+
+    data.advise(memmap2::Advice::WillNeed).unwrap();
+
+    Ok(MemoryMappedFile { file, data })
+}
+
+pub fn close_file(file: MemoryMappedFile) -> Result<(), Error> {
+    file.data.flush().unwrap();
+
+    file.file.unlock().unwrap();
+
+    file.file.close().unwrap();
+
+    Ok(())
 }

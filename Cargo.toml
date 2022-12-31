@@ -23,4 +23,5 @@ openssl = "0.10.45" # System openssl for encryption. Well respected and it a com
 
 # File system
 memmap2 = "0.5.8" # For memory mapping files
-file-guard = "0.1.0" # For locking files
+fs3 = "0.5.0" # For file locking
+close-file = "0.1.0"
