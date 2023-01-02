@@ -1,5 +1,6 @@
 use std::io::Error;
 use std::mem::{transmute, MaybeUninit};
+use std::ops::Range;
 use std::path::Path;
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -19,6 +20,31 @@ pub struct RegionHeaderData {
     location: u32,
     size: u8,
     end: u32,
+    range: Range<u32>,
+}
+
+pub struct ChunkHeaderData {
+    location: usize,
+    length: u32,
+    compression_type: CompressionType,
+    data_start: usize,
+    data_end: usize,
+    data_range: Range<usize>,
+}
+
+struct RegionData {
+    end: AtomicU32,
+    map: DashMap<u32, (bool, RwLock<()>), RandomState>,
+}
+
+struct ChunkData {
+    oversized_data: Option<MemoryMappedFile>,
+}
+
+struct Chunk {
+    region_header_data: RwLock<()>,
+    chunk_header_data: RwLock<()>,
+    data: RwLock<ChunkData>,
 }
 
 pub struct Region {
@@ -26,20 +52,6 @@ pub struct Region {
     file: Option<MemoryMappedFile>,
     data: RegionData,
     chunks: [[Chunk; 32]; 32],
-}
-
-struct RegionData {
-    end: AtomicU32,
-    map: DashMap<u32, bool, RandomState>,
-}
-
-struct Chunk {
-    header_data: RwLock<()>,
-    data: RwLock<ChunkData>,
-}
-
-struct ChunkData {
-    oversized_data: Option<MemoryMappedFile>,
 }
 
 static REGIONS: Lazy<DashMap<(&'static str, i32, i32), Region, RandomState>> =
@@ -60,12 +72,40 @@ fn read_region_header_data(
 
     let end = location + size as u32;
 
-    return RegionHeaderData {
+    let range = location..end;
+
+    RegionHeaderData {
         offset,
         location,
         size,
         end,
-    };
+        range,
+    }
+}
+
+fn read_chunk_header_data(offset: u32, data: &[u8]) -> ChunkHeaderData {
+    let location = offset as usize * 4096;
+
+    let length = ((data[location] as u32) << 24)
+        | ((data[location + 1] as u32) << 16)
+        | ((data[location + 2] as u32) << 8)
+        | (data[location + 4] as u32);
+
+    let compression_type = CompressionType::from_u8(data[location + 5]).unwrap();
+
+    let data_start = location + 5;
+    let data_end = location + 4 + length as usize;
+
+    let data_range = data_start..data_end;
+
+    ChunkHeaderData {
+        location,
+        length,
+        compression_type,
+        data_start,
+        data_end,
+        data_range,
+    }
 }
 
 pub fn open_region(
@@ -101,8 +141,8 @@ fn create_region(directory: &'static str, region_x: i32, region_z: i32) -> Regio
                 let region_header_data =
                     read_region_header_data(chunk_region_x, chunk_region_z, &file.data);
 
-                for i in region_header_data.location..region_header_data.end {
-                    map.insert(i as u32, true).unwrap();
+                for i in region_header_data.range {
+                    map.insert(i as u32, (true, RwLock::new(()))).unwrap();
                 }
                 if region_header_data.end > end {
                     end = region_header_data.end;
@@ -126,7 +166,8 @@ fn create_region(directory: &'static str, region_x: i32, region_z: i32) -> Regio
                     );
                 }
                 *z = MaybeUninit::new(Chunk {
-                    header_data: RwLock::new(()),
+                    chunk_header_data: RwLock::new(()),
+                    region_header_data: RwLock::new(()),
                     data: RwLock::new(ChunkData {
                         oversized_data: chunk_file,
                     }),
@@ -166,7 +207,7 @@ pub fn close_region(directory: &'static str, region_x: i32, region_z: i32) -> Re
     Ok(())
 }
 
-fn read_chunk_data(directory: &'static str, chunk_x: i32, chunk_z: i32) -> Result<&[u8], Error> {
+fn read_chunk_data(directory: &'static str, chunk_x: i32, chunk_z: i32) -> Result<Vec<u8>, Error> {
     let region_x = chunk_x >> 5;
     let region_z = chunk_z >> 5;
 
@@ -176,6 +217,8 @@ fn read_chunk_data(directory: &'static str, chunk_x: i32, chunk_z: i32) -> Resul
     let chunk_region_z = (chunk_z & 31) as u8;
 
     let chunk = &region.chunks[chunk_region_x as usize][chunk_region_z as usize];
+
+    let region_header_data_lock = chunk.region_header_data.read();
 
     if region.file.is_none() {
         return Err(Error::new(
@@ -190,11 +233,24 @@ fn read_chunk_data(directory: &'static str, chunk_x: i32, chunk_z: i32) -> Resul
 
     let mut locked_position = Vec::new();
     locked_position.resize_with(region_header_data.size as usize, || None);
-    for position in region_header_data.location..region_header_data.end {
+    for position in region_header_data.range {
         locked_position.push(Some(region.data.map.get(&(position as u32)).unwrap()));
     }
 
-    if region_header_data.end > region.data.end.load(Ordering::Relaxed) {};
+    drop(region_header_data_lock);
+
+    if region_header_data.end >= region.data.end.load(Ordering::Relaxed) {
+        let _chunk_header_data_lock = chunk.chunk_header_data.read();
+
+        let chunk_header_data = read_chunk_header_data(region_header_data.location, &file.data);
+
+        let decompressed_data = chunk_header_data
+            .compression_type
+            .decompress(&file.data[chunk_header_data.data_range])
+            .unwrap();
+
+        return Ok(decompressed_data);
+    };
 
     Ok(&[])
 }
