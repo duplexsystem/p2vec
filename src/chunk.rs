@@ -20,7 +20,7 @@ struct ChunkHeaderData {
     location: usize,
     length: u32,
     compression_type: CompressionType,
-    is_oversized: bool,
+    oversized: bool,
     data_range: Range<usize>,
 }
 
@@ -50,7 +50,7 @@ impl Chunk {
 
         let chunk_header_data = Self::read_chunk_header_data(region_header_data.location, file)?;
 
-        if chunk_header_data.is_oversized {
+        if chunk_header_data.oversized {
             let chunk_x = region_x << 5 | chunk_region_x as i32;
             let chunk_z = region_z << 5 | chunk_region_z as i32;
 
@@ -117,7 +117,7 @@ impl Chunk {
 
         let compression_type = CompressionType::from_u8(data[location + 4]).unwrap();
 
-        let is_oversized = compression_type_byte == 82;
+        let oversized = compression_type_byte == 82;
 
         let data_start = location + 5;
         let data_end = location + 4 + length as usize;
@@ -128,7 +128,7 @@ impl Chunk {
             location,
             length,
             compression_type,
-            is_oversized,
+            oversized,
             data_range,
         })
     }
