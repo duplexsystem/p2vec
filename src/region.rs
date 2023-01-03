@@ -1,5 +1,5 @@
 use std::io::Error;
-use std::mem::{MaybeUninit, transmute};
+use std::mem::{transmute, MaybeUninit};
 use std::path::Path;
 use std::sync::atomic::AtomicU32;
 
@@ -102,7 +102,7 @@ impl Region {
         Ok(())
     }
 
-    pub fn read_chunk(&self, chunk_x: i32, chunk_z: i32) -> Result<Vec<u8>, Error> {
+    pub fn read_chunk(&self, chunk_x: i32, chunk_z: i32) -> Result<Option<Vec<u8>>, Error> {
         let chunk_region_x = (chunk_x & 31) as u8;
         let chunk_region_z = (chunk_z & 31) as u8;
 

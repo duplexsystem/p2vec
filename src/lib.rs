@@ -46,7 +46,11 @@ pub fn close_region(directory: &'static str, region_x: i32, region_z: i32) -> Re
     Ok(())
 }
 
-pub fn read_chunk(directory: &'static str, chunk_x: i32, chunk_z: i32) -> Result<Vec<u8>, Error> {
+pub fn read_chunk(
+    directory: &'static str,
+    chunk_x: i32,
+    chunk_z: i32,
+) -> Result<Option<Vec<u8>>, Error> {
     let region_x = chunk_x >> 5;
     let region_z = chunk_z >> 5;
 

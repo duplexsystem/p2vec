@@ -134,8 +134,13 @@ impl Chunk {
         })
     }
 
-    pub fn read_chunk_data(&self, inner_region: &InnerRegion) -> Result<Vec<u8>, Error> {
+    pub fn read_chunk_data(&self, inner_region: &InnerRegion) -> Result<Option<Vec<u8>>, Error> {
         let region_header_data = self.region_header_data.read();
+
+        if region_header_data.location <= 1 || region_header_data.size == 0 {
+            return Ok(None);
+        }
+
         let mut locked_sectors = Vec::new();
         locked_sectors.resize_with(region_header_data.size as usize, || None);
 
@@ -165,6 +170,6 @@ impl Chunk {
 
         drop(locked_sectors);
 
-        Ok(data)
+        Ok(Some(data))
     }
 }
