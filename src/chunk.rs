@@ -2,8 +2,6 @@ use std::io::Error;
 use std::ops::Range;
 use std::path::Path;
 
-use ahash::RandomState;
-use dashmap::mapref::one::Ref;
 use parking_lot::RwLock;
 
 use crate::compression::CompressionType;
@@ -56,16 +54,13 @@ impl Chunk {
             let chunk_x = region_x << 5 | chunk_region_x as i32;
             let chunk_z = region_z << 5 | chunk_region_z as i32;
 
-            chunk_file = Some(
-                MemoryMappedFile::open_file_with_guaranteed_size(
-                    4096,
-                    Path::new(&format!(
-                        "{}/c.{}.{}.mcc",
-                        region.directory, chunk_x, chunk_z
-                    )),
-                )
-                    .unwrap(),
-            );
+            chunk_file = Some(MemoryMappedFile::open_file_with_guaranteed_size(
+                4096,
+                Path::new(&format!(
+                    "{}/c.{}.{}.mcc",
+                    region.directory, chunk_x, chunk_z
+                )),
+            )?);
         }
 
         Ok(Chunk {
@@ -138,24 +133,15 @@ impl Chunk {
         })
     }
 
-    pub fn read_chunk_data<
-        F: FnOnce(
-            &InnerRegion,
-            u8,
-            Range<u32>,
-        ) -> Vec<Option<Ref<u32, (bool, RwLock<()>), RandomState>>>,
-    >(
-        &self,
-        inner_region: &InnerRegion,
-        lock_sectors: F,
-    ) -> Result<Vec<u8>, Error> {
+    pub fn read_chunk_data(&self, inner_region: &InnerRegion) -> Result<Vec<u8>, Error> {
         let region_header_data = self.region_header_data.read();
+        let mut locked_sectors = Vec::new();
+        locked_sectors.resize_with(region_header_data.size as usize, || None);
 
-        let locked_sectors = lock_sectors(
-            inner_region,
-            region_header_data.size,
-            region_header_data.range.clone(),
-        );
+        for position in region_header_data.range.clone() {
+            let sector = inner_region.data.map.get(&(position as u32)).unwrap();
+            locked_sectors.push(Some(sector));
+        }
 
         let chunk_header_data = self.chunk_header_data.read();
 

@@ -35,7 +35,7 @@ impl MemoryMappedFile {
             .create(true)
             .open(path)?;
 
-        file.try_lock_exclusive().unwrap();
+        file.try_lock_exclusive()?;
 
         let data = unsafe { MmapMut::map_mut(&file) }?;
 
@@ -43,9 +43,9 @@ impl MemoryMappedFile {
 
         let random_file = RandomAccessFile::try_new(file)?;
 
-        data.advise(memmap2::Advice::Random).unwrap();
+        data.advise(memmap2::Advice::Random)?;
 
-        data.advise(memmap2::Advice::WillNeed).unwrap();
+        data.advise(memmap2::Advice::WillNeed)?;
 
         Ok(MemoryMappedFile {
             file: random_file,
@@ -55,11 +55,11 @@ impl MemoryMappedFile {
     }
 
     pub fn close_file(self) -> Result<(), Error> {
-        self.data.flush().unwrap();
+        self.data.flush()?;
 
         let file = self.file.try_into_inner().unwrap();
 
-        file.unlock().unwrap();
+        file.unlock()?;
 
         file.close().unwrap();
 

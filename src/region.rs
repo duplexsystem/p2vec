@@ -1,15 +1,13 @@
 use std::io::Error;
 use std::mem::{transmute, MaybeUninit};
-use std::ops::Range;
 use std::path::Path;
 use std::sync::atomic::AtomicU32;
 
 use ahash::RandomState;
-use dashmap::mapref::one::{Ref, RefMut};
+use dashmap::mapref::one::RefMut;
 use dashmap::DashMap;
 use libdeflater::CompressionLvl;
 use once_cell::sync::Lazy;
-use parking_lot::RwLock;
 
 use crate::chunk::Chunk;
 use crate::compression::CompressionType;
@@ -18,13 +16,13 @@ use crate::util::get_alignment_vector;
 
 pub struct RegionData {
     end: AtomicU32,
-    map: DashMap<u32, (bool, RwLock<()>), RandomState>,
+    pub(crate) map: DashMap<u32, bool, RandomState>,
 }
 
 pub struct InnerRegion {
     pub(crate) directory: &'static str,
     pub(crate) file: Option<MemoryMappedFile>,
-    data: RegionData,
+    pub(crate) data: RegionData,
 }
 
 pub struct Region {
@@ -76,11 +74,7 @@ fn create_region(directory: &'static str, region_x: i32, region_z: i32) -> Resul
                 let region_header_data = chunk.region_header_data.read();
 
                 for i in region_header_data.range.clone() {
-                    inner_region
-                        .data
-                        .map
-                        .insert(i as u32, (true, RwLock::new(())))
-                        .unwrap();
+                    inner_region.data.map.insert(i as u32, true).unwrap();
                 }
 
                 if region_header_data.end > end {
@@ -130,21 +124,6 @@ pub fn close_region(directory: &'static str, region_x: i32, region_z: i32) -> Re
     Ok(())
 }
 
-fn lock_sectors(
-    inner_region: &InnerRegion,
-    size: u8,
-    range: Range<u32>,
-) -> Vec<Option<Ref<u32, (bool, RwLock<()>), RandomState>>> {
-    let mut locked_position = Vec::new();
-    locked_position.resize_with(size as usize, || None);
-
-    for position in range {
-        locked_position.push(Some(inner_region.data.map.get(&(position as u32)).unwrap()));
-    }
-
-    locked_position
-}
-
 fn read_chunk_data(directory: &'static str, chunk_x: i32, chunk_z: i32) -> Result<Vec<u8>, Error> {
     let region_x = chunk_x >> 5;
     let region_z = chunk_z >> 5;
@@ -156,9 +135,9 @@ fn read_chunk_data(directory: &'static str, chunk_x: i32, chunk_z: i32) -> Resul
 
     let chunk = &region.chunks[chunk_region_x as usize][chunk_region_z as usize];
 
-    let data = chunk.read_chunk_data(&region.inner_region, lock_sectors)?;
+    let data = chunk.read_chunk_data(&region.inner_region)?;
 
-    return Ok(data);
+    Ok(data)
 }
 
 fn write_chunk_data(
