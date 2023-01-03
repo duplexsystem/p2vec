@@ -60,6 +60,7 @@ impl Chunk {
                     "{}/c.{}.{}.mcc",
                     region.directory, chunk_x, chunk_z
                 )),
+                false,
             )?);
         }
 

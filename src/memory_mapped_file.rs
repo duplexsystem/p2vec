@@ -8,22 +8,25 @@ use std::path::Path;
 use close_file::Closable;
 use fs3::FileExt;
 use memmap2::MmapMut;
-use positioned_io::{RandomAccessFile, ReadAt};
+use positioned_io::RandomAccessFile;
+
+use crate::possilby_random_file::PossiblyRandomFile;
 
 pub struct MemoryMappedFile {
-    file: RandomAccessFile,
+    file: PossiblyRandomFile,
     data: MmapMut,
     memory_size: usize,
 }
 
 impl MemoryMappedFile {
-    pub fn open_file(path: &Path) -> Result<MemoryMappedFile, Error> {
-        Self::open_file_with_guaranteed_size(0, path)
+    pub fn open_file(path: &Path, random: bool) -> Result<MemoryMappedFile, Error> {
+        Self::open_file_with_guaranteed_size(0, path, random)
     }
 
     pub fn open_file_with_guaranteed_size(
         initial_size: usize,
         path: &Path,
+        random: bool,
     ) -> Result<MemoryMappedFile, Error> {
         if !path.is_file() {
             fs::create_dir_all(path.parent().unwrap())?;
@@ -43,14 +46,18 @@ impl MemoryMappedFile {
 
         let memory_size = file.metadata()?.len() as usize;
 
-        let random_file = RandomAccessFile::try_new(file)?;
+        let file = if random {
+            PossiblyRandomFile::new_from_random_file(RandomAccessFile::try_new(file)?)
+        } else {
+            PossiblyRandomFile::new_from_file(file)
+        };
 
         data.advise(memmap2::Advice::Random)?;
 
         data.advise(memmap2::Advice::WillNeed)?;
 
         Ok(MemoryMappedFile {
-            file: random_file,
+            file,
             data,
             memory_size,
         })
@@ -81,7 +88,11 @@ impl MemoryMappedFile {
         Ok(Cow::Owned(data))
     }
 
-    fn read_file_disk(file: &RandomAccessFile, start: usize, buf: &mut [u8]) -> Result<(), Error> {
+    fn read_file_disk(
+        file: &PossiblyRandomFile,
+        start: usize,
+        buf: &mut [u8],
+    ) -> Result<(), Error> {
         file.read_at(start as u64, buf)?;
 
         Ok(())

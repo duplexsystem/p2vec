@@ -13,6 +13,7 @@ use crate::util::get_alignment_vector;
 mod chunk;
 mod compression;
 mod memory_mapped_file;
+mod possilby_random_file;
 mod region;
 mod util;
 

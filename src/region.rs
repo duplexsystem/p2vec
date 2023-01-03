@@ -1,5 +1,5 @@
 use std::io::Error;
-use std::mem::{transmute, MaybeUninit};
+use std::mem::{MaybeUninit, transmute};
 use std::path::Path;
 use std::sync::atomic::AtomicU32;
 
@@ -34,6 +34,7 @@ impl Region {
         let file = MemoryMappedFile::open_file_with_guaranteed_size(
             8192,
             Path::new(&format!("{directory}/r.{region_x}.{region_z}.mca")),
+            true,
         )?;
         let map = DashMap::with_capacity_and_hasher(1, RandomState::default());
         let mut end = 2;
