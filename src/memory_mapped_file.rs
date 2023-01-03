@@ -37,6 +37,8 @@ impl MemoryMappedFile {
 
         file.try_lock_exclusive()?;
 
+        file.allocate(initial_size as u64)?;
+
         let data = unsafe { MmapMut::map_mut(&file) }?;
 
         let memory_size = file.metadata()?.len() as usize;
