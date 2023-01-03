@@ -1,5 +1,6 @@
+mod chunk;
 mod compression;
-mod file;
+mod memory_mapped_file;
 mod region;
 mod util;
 

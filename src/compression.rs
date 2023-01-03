@@ -1,5 +1,7 @@
-use libdeflater::{CompressionLvl, Compressor, Decompressor};
+use std::borrow::Cow;
 use std::io::{Error, Read};
+
+use libdeflater::{CompressionLvl, Compressor, Decompressor};
 
 // CompressionType is an enum that represents different compression types that this code can handle
 pub enum CompressionType {
@@ -30,7 +32,7 @@ impl CompressionType {
     }
 
     // Decompresses a given slice of bytes using the decompression method corresponding to the CompressionType variant
-    pub fn decompress(&self, data: &[u8]) -> Result<Vec<u8>, Error> {
+    pub fn decompress(&self, data: Cow<[u8]>) -> Result<Vec<u8>, Error> {
         match self {
             // For gzip compression, use libdeflate to decompress the data
             CompressionType::Gzip => {
@@ -51,13 +53,15 @@ impl CompressionType {
                 let mut decompressor = Decompressor::new();
                 let mut outbuf = Vec::new();
                 outbuf.resize(isize, 0);
-                decompressor.gzip_decompress(data, &mut outbuf).unwrap();
+                decompressor
+                    .gzip_decompress(data.as_ref(), &mut outbuf)
+                    .unwrap();
                 Ok(outbuf)
             }
             // For zlib compression, use the system zlib implementation provided by the `flate2` crate to decompress the data
             CompressionType::Zlib => {
                 //we don't know the decompressed size, so we have to use system zlib here
-                let mut decoder = flate2::read::ZlibDecoder::new(data);
+                let mut decoder = flate2::read::ZlibDecoder::new(data.as_ref());
                 let mut buffer = Vec::new();
                 decoder.read_to_end(&mut buffer)?;
                 Ok(buffer)
