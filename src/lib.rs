@@ -1,20 +1,24 @@
 use std::io::Error;
 
 use ahash::RandomState;
-use dashmap::mapref::one::RefMut;
 use dashmap::DashMap;
+use dashmap::mapref::one::RefMut;
 use libdeflater::CompressionLvl;
 use once_cell::sync::Lazy;
 
 use crate::compression::CompressionType;
+use crate::memory_util::get_alignment_vector;
 use crate::region::Region;
-use crate::util::get_alignment_vector;
 
 mod chunk;
 mod compression;
 mod memory_mapped_file;
+mod random_file;
 mod region;
-mod util;
+mod sequential_file;
+mod specialized_file;
+mod memory_util;
+mod file_util;
 
 static REGIONS: Lazy<DashMap<(&'static str, i32, i32), Region, RandomState>> =
     Lazy::new(|| DashMap::with_capacity_and_hasher(1, RandomState::default()));
