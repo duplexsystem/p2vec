@@ -71,7 +71,7 @@ impl Region {
                     let region_header_data = chunk.region_header_data.read();
 
                     for i in region_header_data.range.clone() {
-                        inner_region.data.map.insert(i as u32, true).unwrap();
+                        inner_region.data.map.insert(i, true).unwrap();
                     }
 
                     if region_header_data.end > end {

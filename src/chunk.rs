@@ -144,7 +144,7 @@ impl Chunk {
         locked_sectors.resize_with(region_header_data.size as usize, || None);
 
         for position in region_header_data.range.clone() {
-            let sector = inner_region.data.map.get(&(position as u32)).unwrap();
+            let sector = inner_region.data.map.get(&position).unwrap();
             locked_sectors.push(Some(sector));
         }
 
