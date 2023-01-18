@@ -13,6 +13,7 @@ parking_lot = { version = "0.12.1", features = ["hardware-lock-elision"] } # Ena
 dashmap = "5.4.0"
 ahash = "0.8.2"
 libc = "0.2.139" # for low level utils
+smallvec = { version = "1.10.0", features = ["write", "union", "const_generics", "const_new"] }
 
 # Compression
 libdeflater = "0.11.0" # For defalte based compression
@@ -26,6 +27,9 @@ memmap2 = "0.5.8" # For memory mapping files
 fs3 = "0.5.0" # For file locking
 close-file = "0.1.0"
 positioned-io = "0.3.1"
+
+[target.'cfg(all(unix, target_os = "linux"))'.dependencies]
+io-uring = { version = "0.5.11", features = ["unstable"] }
 
 [lib]
 crate_type = ["cdylib"]
