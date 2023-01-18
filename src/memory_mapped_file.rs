@@ -1,13 +1,13 @@
 use std::borrow::Cow;
-use std::io::Error;
+use std::io::{Error, Write};
 use std::ops::Range;
 use std::path::Path;
 
 use memmap2::MmapMut;
 
-use crate::{random_file, sequential_file};
 use crate::file_util::open_file_with_guaranteed_size;
 use crate::specialized_file::SpecializedFile;
+use crate::{random_file, sequential_file};
 
 pub struct MemoryMappedFile {
     file: Box<dyn SpecializedFile + Send + Sync>,
@@ -62,6 +62,24 @@ impl MemoryMappedFile {
     pub fn read_file(&self, range: Range<usize>) -> Result<Cow<[u8]>, Error> {
         if range.end <= self.memory_size {
             return Ok(Cow::Borrowed(&self.data[range]));
+        } else if range.start <= self.memory_size {
+            let mut vector = Vec::new();
+
+            vector.resize(range.len(), 0u8);
+
+            let memory_range = range.start..self.memory_size;
+
+            vector
+                .write_all(&self.data[range.start..self.memory_size])
+                .unwrap();
+
+            self.file.read_file(
+                self.memory_size + 1,
+                (&mut vector.as_mut_slice()
+                    [range.start + (range.len() - memory_range.len())..range.len()]),
+            )?;
+
+            return Ok(Cow::Owned(vector));
         }
 
         let mut data = Vec::new();
