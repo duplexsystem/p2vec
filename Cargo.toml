@@ -14,9 +14,10 @@ dashmap = "5.4.0"
 ahash = "0.8.2"
 libc = "0.2.139" # for low level utils
 smallvec = { version = "1.10.0", features = ["write", "union", "const_generics", "const_new"] }
+atomic-bitvec = "0.1.1"
 
 # Compression
-libdeflater = "0.11.0" # For defalte based compression
+libdeflater = "0.12.0" # For defalte based compression
 flate2 = { version = "1.0.25", features = ["zlib"], default-features = false } # System zlib for streaming data. Slower but used as a fallback in case we can't use libdeflate. Doesn't take up much space because it uses the system zlib
 
 # Encryption
