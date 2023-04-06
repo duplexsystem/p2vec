@@ -1,12 +1,9 @@
-use std::io::Error;
-use std::ops::Range;
-use std::path::Path;
-
-use parking_lot::RwLock;
-
 use crate::compression::CompressionType;
 use crate::memory_mapped_file::MemoryMappedFile;
 use crate::region::InnerRegion;
+use std::io::Error;
+use std::ops::Range;
+use std::path::Path;
 
 pub struct RegionHeaderData {
     pub(crate) offset: u16,
@@ -25,17 +22,17 @@ struct ChunkHeaderData {
 }
 
 struct ChunkData {
-    oversized_data: Option<MemoryMappedFile>,
+    oversized_data: Option<(MemoryMappedFile, usize)>,
 }
 
 pub struct Chunk {
-    pub(crate) region_header_data: RwLock<RegionHeaderData>,
-    chunk_header_data: RwLock<ChunkHeaderData>,
-    data: RwLock<ChunkData>,
+    pub(crate) region_header_data: RegionHeaderData,
+    chunk_header_data: ChunkHeaderData,
+    data: ChunkData,
 }
 
 impl Chunk {
-    pub(crate) fn new_from_proto_region(
+    pub(crate) fn new_from_inner_region(
         chunk_region_x: u8,
         chunk_region_z: u8,
         region: &InnerRegion,
@@ -46,7 +43,7 @@ impl Chunk {
         let region_header_data =
             Self::read_region_header_data(chunk_region_x, chunk_region_z, file)?;
 
-        let mut chunk_file: Option<MemoryMappedFile> = None;
+        let mut chunk_file: Option<(MemoryMappedFile, usize)> = None;
 
         let chunk_header_data = Self::read_chunk_header_data(region_header_data.location, file)?;
 
@@ -54,7 +51,7 @@ impl Chunk {
             let chunk_x = region_x << 5 | chunk_region_x as i32;
             let chunk_z = region_z << 5 | chunk_region_z as i32;
 
-            chunk_file = Some(MemoryMappedFile::open_file_with_guaranteed_size(
+            chunk_file = Some(MemoryMappedFile::open_file(
                 4096,
                 Path::new(&format!(
                     "{}/c.{}.{}.mcc",
@@ -65,11 +62,11 @@ impl Chunk {
         }
 
         Ok(Chunk {
-            region_header_data: RwLock::new(region_header_data),
-            chunk_header_data: RwLock::new(chunk_header_data),
-            data: RwLock::new(ChunkData {
+            region_header_data,
+            chunk_header_data,
+            data: ChunkData {
                 oversized_data: chunk_file,
-            }),
+            },
         })
     }
 
@@ -135,21 +132,9 @@ impl Chunk {
     }
 
     pub fn read_chunk_data(&self, inner_region: &InnerRegion) -> Result<Option<Vec<u8>>, Error> {
-        let region_header_data = self.region_header_data.read();
-
-        if region_header_data.location <= 1 || region_header_data.size == 0 {
+        if self.region_header_data.location <= 1 || self.region_header_data.size == 0 {
             return Ok(None);
         }
-
-        let mut locked_sectors = Vec::new();
-        locked_sectors.resize_with(region_header_data.size as usize, || None);
-
-        for position in region_header_data.range.clone() {
-            let sector = inner_region.data.map.get(&position).unwrap();
-            locked_sectors.push(Some(sector));
-        }
-
-        let chunk_header_data = self.chunk_header_data.read();
 
         if inner_region.file.is_none() {
             return Err(Error::new(
@@ -162,13 +147,12 @@ impl Chunk {
             .file
             .as_ref()
             .unwrap()
-            .read_file(chunk_header_data.data_range.clone())?;
+            .read_file(self.chunk_header_data.data_range.clone())?;
 
-        let data = chunk_header_data
+        let data = self
+            .chunk_header_data
             .compression_type
             .decompress(compressed_data)?;
-
-        drop(locked_sectors);
 
         Ok(Some(data))
     }

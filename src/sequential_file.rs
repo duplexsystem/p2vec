@@ -20,6 +20,11 @@ impl SpecializedFile for SequentialFile {
 
         Ok(())
     }
+
+    fn get_file_size(self) -> Result<(Box<dyn SpecializedFile + Send + Sync>, usize), Error> {
+        let size = self.file.metadata()?.len() as usize;
+        return Ok((Box::new(self), size));
+    }
 }
 
 pub(crate) fn specialize_file(file: File) -> Result<SequentialFile, Error> {

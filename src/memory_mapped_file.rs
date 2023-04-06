@@ -16,16 +16,14 @@ pub struct MemoryMappedFile {
 }
 
 impl MemoryMappedFile {
-    pub fn open_file(path: &Path, is_random: bool) -> Result<MemoryMappedFile, Error> {
-        Self::open_file_with_guaranteed_size(0, path, is_random)
-    }
-
-    pub fn open_file_with_guaranteed_size(
+    pub fn open_file(
         initial_size: usize,
         path: &Path,
         is_random: bool,
-    ) -> Result<MemoryMappedFile, Error> {
+    ) -> Result<(MemoryMappedFile, usize), Error> {
         let file = open_file_with_guaranteed_size(initial_size, path)?;
+
+        let file_size = file.metadata()?.len() as usize;
 
         let data = unsafe { MmapMut::map_mut(&file) }?;
 
@@ -46,11 +44,14 @@ impl MemoryMappedFile {
             }
         };
 
-        Ok(MemoryMappedFile {
-            file,
-            data,
-            memory_size,
-        })
+        Ok((
+            MemoryMappedFile {
+                file,
+                data,
+                memory_size,
+            },
+            file_size,
+        ))
     }
 
     pub fn close_file(self) -> Result<(), Error> {
@@ -67,16 +68,13 @@ impl MemoryMappedFile {
 
             vector.resize(range.len(), 0u8);
 
-            let memory_range = range.start..self.memory_size;
-
             vector
                 .write_all(&self.data[range.start..self.memory_size])
                 .unwrap();
 
             self.file.read_file(
                 self.memory_size + 1,
-                (&mut vector.as_mut_slice()
-                    [range.start + (range.len() - memory_range.len())..range.len()]),
+                &mut vector.as_mut_slice()[self.memory_size - range.start..range.len()],
             )?;
 
             return Ok(Cow::Owned(vector));

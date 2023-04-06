@@ -1,9 +1,9 @@
+use close_err::Closable;
 use std::fs;
 use std::fs::{File, OpenOptions};
 use std::io::Error;
 use std::path::Path;
 
-use close_file::Closable;
 use fs3::FileExt;
 use libc::c_int;
 

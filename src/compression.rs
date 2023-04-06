@@ -39,7 +39,7 @@ impl CompressionType {
                 // gzip RFC1952: a valid gzip file has an ISIZE field in the
                 // footer, which is a little-endian u32 number representing the
                 // decompressed size. This is ideal for libdeflate, which needs
-                // preallocating the decompressed buffer.
+                // pre-allocating the decompressed buffer.
                 let isize = {
                     let isize_start = data.len() - 4;
                     let isize_bytes = &data[isize_start..];
