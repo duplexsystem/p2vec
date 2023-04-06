@@ -7,7 +7,7 @@ use std::path::Path;
 use fs3::FileExt;
 use libc::c_int;
 
-pub fn file_advise(file: &File, advice: c_int) {
+pub(crate) fn file_advise(file: &File, advice: c_int) {
     #[cfg(all(unix, target_os = "linux"))]
     unsafe {
         use std::os::fd::AsRawFd;
@@ -15,7 +15,10 @@ pub fn file_advise(file: &File, advice: c_int) {
     }
 }
 
-pub fn open_file_with_guaranteed_size(initial_size: usize, path: &Path) -> Result<File, Error> {
+pub(crate) fn open_file_with_guaranteed_size(
+    initial_size: usize,
+    path: &Path,
+) -> Result<File, Error> {
     if !path.is_file() {
         fs::create_dir_all(path.parent().unwrap())?;
     }
@@ -35,7 +38,7 @@ pub fn open_file_with_guaranteed_size(initial_size: usize, path: &Path) -> Resul
     Ok(file)
 }
 
-pub fn close_file(file: File) -> Result<(), Error> {
+pub(crate) fn close_file(file: File) -> Result<(), Error> {
     file.unlock()?;
 
     file.close().unwrap();

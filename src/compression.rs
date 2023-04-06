@@ -4,7 +4,7 @@ use std::io::{Error, Read};
 use libdeflater::{CompressionLvl, Compressor, Decompressor};
 
 // CompressionType is an enum that represents different compression types that this code can handle
-pub enum CompressionType {
+pub(crate) enum CompressionType {
     Gzip,
     Zlib,
     Uncompressed,
@@ -13,7 +13,7 @@ pub enum CompressionType {
 // Implementations of various methods for the CompressionType enum
 impl CompressionType {
     // Converts a u8 value to the corresponding CompressionType variant
-    pub fn from_u8(int: u8) -> Option<CompressionType> {
+    pub(crate) fn from_u8(int: u8) -> Option<CompressionType> {
         match int {
             1 => Some(CompressionType::Gzip),
             2 => Some(CompressionType::Zlib),
@@ -23,7 +23,7 @@ impl CompressionType {
     }
 
     // Converts a CompressionType variant to the corresponding u8 value
-    pub fn to_u8(&self) -> u8 {
+    pub(crate) fn to_u8(&self) -> u8 {
         match self {
             CompressionType::Gzip => 1,
             CompressionType::Zlib => 2,
@@ -32,7 +32,7 @@ impl CompressionType {
     }
 
     // Decompresses a given slice of bytes using the decompression method corresponding to the CompressionType variant
-    pub fn decompress(&self, data: Cow<[u8]>) -> Result<Vec<u8>, Error> {
+    pub(crate) fn decompress(&self, data: Cow<[u8]>) -> Result<Vec<u8>, Error> {
         match self {
             // For gzip compression, use libdeflate to decompress the data
             CompressionType::Gzip => {
@@ -72,7 +72,11 @@ impl CompressionType {
     }
 
     // Compresses a given slice of bytes using the compression method corresponding to the CompressionType variant
-    pub fn compress(&self, data: &[u8], compression: CompressionLvl) -> Result<Vec<u8>, Error> {
+    pub(crate) fn compress(
+        &self,
+        data: &[u8],
+        compression: CompressionLvl,
+    ) -> Result<Vec<u8>, Error> {
         match self {
             // For gzip compression, use libdeflate to compress the data
             CompressionType::Gzip => {

@@ -9,14 +9,14 @@ use crate::file_util::open_file_with_guaranteed_size;
 use crate::specialized_file::SpecializedFile;
 use crate::{random_file, sequential_file};
 
-pub struct MemoryMappedFile {
+pub(crate) struct MemoryMappedFile {
     file: Box<dyn SpecializedFile + Send + Sync>,
     data: MmapMut,
     memory_size: usize,
 }
 
 impl MemoryMappedFile {
-    pub fn open_file(
+    pub(crate) fn open_file(
         initial_size: usize,
         path: &Path,
         is_random: bool,
@@ -54,13 +54,13 @@ impl MemoryMappedFile {
         ))
     }
 
-    pub fn close_file(self) -> Result<(), Error> {
+    pub(crate) fn close_file(self) -> Result<(), Error> {
         self.data.flush()?;
 
         self.file.close_file()
     }
 
-    pub fn read_file(&self, range: Range<usize>) -> Result<Cow<[u8]>, Error> {
+    pub(crate) fn read_file(&self, range: Range<usize>) -> Result<Cow<[u8]>, Error> {
         if range.end <= self.memory_size {
             return Ok(Cow::Borrowed(&self.data[range]));
         } else if range.start <= self.memory_size {

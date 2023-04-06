@@ -6,7 +6,7 @@ use positioned_io::ReadAt;
 use crate::file_util::{close_file, file_advise};
 use crate::specialized_file::SpecializedFile;
 
-pub struct SequentialFile {
+pub(crate) struct SequentialFile {
     file: File,
 }
 

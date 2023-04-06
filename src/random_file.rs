@@ -6,7 +6,7 @@ use positioned_io::{RandomAccessFile, ReadAt};
 use crate::file_util::close_file;
 use crate::specialized_file::SpecializedFile;
 
-pub struct RandomFile {
+pub(crate) struct RandomFile {
     file: RandomAccessFile,
 }
 

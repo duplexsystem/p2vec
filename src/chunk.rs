@@ -5,7 +5,7 @@ use std::io::Error;
 use std::ops::Range;
 use std::path::Path;
 
-pub struct RegionHeaderData {
+pub(crate) struct RegionHeaderData {
     pub(crate) offset: u16,
     pub(crate) location: u32,
     pub(crate) size: u8,
@@ -25,7 +25,7 @@ struct ChunkData {
     oversized_data: Option<(MemoryMappedFile, usize)>,
 }
 
-pub struct Chunk {
+pub(crate) struct Chunk {
     pub(crate) region_header_data: RegionHeaderData,
     chunk_header_data: ChunkHeaderData,
     data: ChunkData,
@@ -113,7 +113,7 @@ impl Chunk {
 
         let compression_type_byte = data[location + 4];
 
-        let compression_type = CompressionType::from_u8(data[location + 4]).unwrap();
+        Flet compression_type = CompressionType::from_u8(data[location + 4]).unwrap();
 
         let oversized = compression_type_byte == 82;
 
@@ -131,7 +131,10 @@ impl Chunk {
         })
     }
 
-    pub fn read_chunk_data(&self, inner_region: &InnerRegion) -> Result<Option<Vec<u8>>, Error> {
+    pub(crate) fn read_chunk_data(
+        &self,
+        inner_region: &InnerRegion,
+    ) -> Result<Option<Vec<u8>>, Error> {
         if self.region_header_data.location <= 1 || self.region_header_data.size == 0 {
             return Ok(None);
         }
