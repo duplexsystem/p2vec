@@ -5,9 +5,9 @@ use std::path::Path;
 
 use memmap2::MmapMut;
 
+use crate::{random_file, sequential_file};
 use crate::file_util::open_file_with_guaranteed_size;
 use crate::specialized_file::SpecializedFile;
-use crate::{random_file, sequential_file};
 
 pub(crate) struct MemoryMappedFile {
     file: Box<dyn SpecializedFile + Send + Sync>,

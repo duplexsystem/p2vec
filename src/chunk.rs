@@ -1,9 +1,10 @@
-use crate::compression::CompressionType;
-use crate::memory_mapped_file::MemoryMappedFile;
-use crate::region::InnerRegion;
 use std::io::Error;
 use std::ops::Range;
 use std::path::Path;
+
+use crate::compression::CompressionType;
+use crate::memory_mapped_file::MemoryMappedFile;
+use crate::region::InnerRegion;
 
 pub(crate) struct RegionHeaderData {
     pub(crate) offset: u16,
@@ -113,7 +114,7 @@ impl Chunk {
 
         let compression_type_byte = data[location + 4];
 
-        Flet compression_type = CompressionType::from_u8(data[location + 4]).unwrap();
+        let compression_type = CompressionType::from_u8(data[location + 4]).unwrap();
 
         let oversized = compression_type_byte == 82;
 

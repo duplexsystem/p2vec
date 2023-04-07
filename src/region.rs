@@ -1,10 +1,12 @@
+use std::io::Error;
+use std::mem::{MaybeUninit, transmute};
+use std::path::Path;
+use std::sync::atomic::{AtomicU32, Ordering};
+
+use parking_lot::RwLock;
+
 use crate::chunk::Chunk;
 use crate::memory_mapped_file::MemoryMappedFile;
-use parking_lot::RwLock;
-use std::io::Error;
-use std::mem::{transmute, MaybeUninit};
-use std::path::Path;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 #[derive(Hash, Eq, PartialEq, Copy, Clone)]
 pub(crate) struct RegionKey {
