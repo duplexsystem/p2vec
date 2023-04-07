@@ -30,12 +30,12 @@ pub(crate) struct Region {
 
 impl Region {
     pub(crate) fn new(key: &RegionKey) -> Result<Region, Error> {
-        let (file, file_size) = MemoryMappedFile::open_file(
+        let file = MemoryMappedFile::open_file(
             8192,
             Path::new(&format!("{0}/r.{1}.{2}.mca", key.directory, key.x, key.z)),
             true,
         )?;
-        let end = ((file_size as u32 / 4096) - 2).max(1);
+        let end = ((file.memory_size as u32 / 4096) - 2).max(1);
 
         let static_region_metadata = StaticRegionMetadata {
             directory: key.directory,

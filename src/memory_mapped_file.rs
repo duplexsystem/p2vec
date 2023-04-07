@@ -5,14 +5,14 @@ use std::path::Path;
 
 use memmap2::MmapMut;
 
-use crate::{random_file, sequential_file};
 use crate::file_util::open_file_with_guaranteed_size;
 use crate::specialized_file::SpecializedFile;
+use crate::{random_file, sequential_file};
 
 pub(crate) struct MemoryMappedFile {
     file: Box<dyn SpecializedFile + Send + Sync>,
     data: MmapMut,
-    memory_size: usize,
+    pub(crate) memory_size: usize,
 }
 
 impl MemoryMappedFile {
@@ -20,10 +20,8 @@ impl MemoryMappedFile {
         initial_size: usize,
         path: &Path,
         is_random: bool,
-    ) -> Result<(MemoryMappedFile, usize), Error> {
+    ) -> Result<MemoryMappedFile, Error> {
         let file = open_file_with_guaranteed_size(initial_size, path)?;
-
-        let file_size = file.metadata()?.len() as usize;
 
         let data = unsafe { MmapMut::map_mut(&file) }?;
 
@@ -44,14 +42,11 @@ impl MemoryMappedFile {
             }
         };
 
-        Ok((
-            MemoryMappedFile {
-                file,
-                data,
-                memory_size,
-            },
-            file_size,
-        ))
+        Ok((MemoryMappedFile {
+            file,
+            data,
+            memory_size,
+        }))
     }
 
     pub(crate) fn close_file(self) -> Result<(), Error> {

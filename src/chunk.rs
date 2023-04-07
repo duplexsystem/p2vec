@@ -23,7 +23,7 @@ struct ChunkHeaderData {
 }
 
 struct ChunkData {
-    oversized_data: Option<(MemoryMappedFile, usize)>,
+    oversized_data: Option<MemoryMappedFile>,
 }
 
 pub(crate) struct Chunk {
@@ -44,7 +44,7 @@ impl Chunk {
         let region_header_data =
             Self::read_region_header_data(chunk_region_x, chunk_region_z, file)?;
 
-        let mut chunk_file: Option<(MemoryMappedFile, usize)> = None;
+        let mut chunk_file: Option<MemoryMappedFile> = None;
 
         let chunk_header_data = Self::read_chunk_header_data(region_header_data.location, file)?;
 
@@ -82,7 +82,7 @@ impl Chunk {
 
         let location = ((data[offset as usize] as u32) << 16)
             | ((data[offset as usize + 1] as u32) << 8)
-            | data[offset as usize + 2] as u32;
+            | (data[offset as usize + 2] as u32);
 
         let size = data[offset as usize + 3];
 
