@@ -1,14 +1,15 @@
 use std::io::Error;
 
 use ahash::RandomState;
-use dashmap::mapref::one::Ref;
 use dashmap::DashMap;
+use dashmap::mapref::one::Ref;
 use libdeflater::CompressionLvl;
 use once_cell::sync::Lazy;
 
 use crate::compression::CompressionType;
 use crate::memory_util::get_alignment_vector;
-use crate::region::{Region, RegionKey};
+use crate::region::Region;
+use crate::region_key::{get_region_key, RegionKey};
 
 mod chunk;
 mod compression;
@@ -17,13 +18,13 @@ mod memory_mapped_file;
 mod memory_util;
 mod random_file;
 mod region;
+mod region_key;
 mod sequential_file;
 mod specialized_file;
 
 static REGIONS: Lazy<DashMap<RegionKey, Region, RandomState>> =
     Lazy::new(|| DashMap::with_capacity_and_hasher(1, RandomState::default()));
 
-#[inline(never)]
 pub(crate) fn open_region_inner(key: RegionKey) -> Ref<'static, RegionKey, Region, RandomState> {
     REGIONS
         .entry(key)
@@ -35,14 +36,6 @@ pub(crate) fn open_region(
     key: RegionKey,
 ) -> Result<Ref<'static, RegionKey, Region, RandomState>, Error> {
     Ok(REGIONS.get(&key).unwrap_or_else(|| open_region_inner(key)))
-}
-
-#[inline]
-pub(crate) fn get_region_key(directory: &'static str, chunk_x: i32, chunk_z: i32) -> RegionKey {
-    let x = chunk_x >> 5;
-    let z = chunk_z >> 5;
-
-    RegionKey { directory, x, z }
 }
 
 pub(crate) fn get_region(

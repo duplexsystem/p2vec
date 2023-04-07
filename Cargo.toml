@@ -15,6 +15,7 @@ dashmap = "5.4.0"
 ahash = "0.8.3"
 libc = "0.2.140" # for low level utils
 smallvec = { version = "1.10.0", features = ["write", "union", "const_generics", "const_new"] }
+glidesort = "0.1.2"
 
 # Compression
 libdeflater = "0.13.0" # For defalte based compression

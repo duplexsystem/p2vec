@@ -1,35 +1,30 @@
 use std::io::Error;
-use std::mem::{MaybeUninit, transmute};
+use std::mem::{transmute, MaybeUninit};
+use std::ops::Range;
 use std::path::Path;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64};
 
 use parking_lot::RwLock;
 
 use crate::chunk::Chunk;
 use crate::memory_mapped_file::MemoryMappedFile;
+use crate::region_key::RegionKey;
 
-#[derive(Hash, Eq, PartialEq, Copy, Clone)]
-pub(crate) struct RegionKey {
-    pub(crate) directory: &'static str,
-    pub(crate) x: i32,
-    pub(crate) z: i32,
-}
-
-pub(crate) struct RegionData {
-    pub(crate) free_blocks: RwLock<Vec<AtomicU32>>,
-    pub(crate) claimed_blocks: AtomicU32,
+pub(crate) struct MutableRegionMetadata {
+    pub(crate) free_ranges: RwLock<Vec<AtomicU64>>,
+    pub(crate) unclaimed_blocks: AtomicU32,
     pub(crate) end: AtomicU32,
     pub(crate) wanted_end: AtomicU32,
 }
 
-pub(crate) struct InnerRegion {
+pub(crate) struct StaticRegionMetadata {
     pub(crate) directory: &'static str,
     pub(crate) file: Option<MemoryMappedFile>,
-    pub(crate) data: RegionData,
 }
 
 pub(crate) struct Region {
-    inner_region: InnerRegion,
+    static_metadata: StaticRegionMetadata,
+    mutable_metadata: MutableRegionMetadata,
     chunks: [[RwLock<Chunk>; 32]; 32],
 }
 
@@ -42,78 +37,90 @@ impl Region {
         )?;
         let end = ((file_size as u32 / 4096) - 2).max(1);
 
-        let mut free_blocks = Vec::with_capacity((end + 1) as usize);
-        (2..end).for_each(|i| free_blocks.push(AtomicU32::new(i)));
-
-        let inner_region = InnerRegion {
+        let static_region_metadata = StaticRegionMetadata {
             directory: key.directory,
             file: Some(file),
-            data: RegionData {
-                end: AtomicU32::new(end),
-                claimed_blocks: AtomicU32::new(0),
-                free_blocks: RwLock::new(Vec::with_capacity((end + 1) as usize)),
-                wanted_end: AtomicU32::new(end),
-            },
         };
 
-        let map = inner_region.data.free_blocks.write();
-        let mut claimed_blocks: u32 = 0;
+        let mut taken_ranges: [MaybeUninit<Range<u32>>; 1024] =
+            unsafe { MaybeUninit::uninit().assume_init() };
 
         let chunks = {
             // Create an array of uninitialized values.
             let mut x_array: [MaybeUninit<[RwLock<Chunk>; 32]>; 32] =
                 unsafe { MaybeUninit::uninit().assume_init() };
 
-            let chunk_region_x = 0;
-            for x in x_array.iter_mut() {
+            for x in x_array.iter_mut().enumerate() {
                 // Create an array of uninitialized values.
                 let mut z_array: [MaybeUninit<RwLock<Chunk>>; 32] =
                     unsafe { MaybeUninit::uninit().assume_init() };
 
-                let chunk_region_z = 0;
-                for z in z_array.iter_mut() {
-                    let chunk = Chunk::new_from_inner_region(
-                        chunk_region_x,
-                        chunk_region_z,
-                        &inner_region,
+                for z in z_array.iter_mut().enumerate() {
+                    let chunk = Chunk::new(
+                        x.0 as u32,
+                        z.0 as u32,
+                        &static_region_metadata,
                         key.x,
                         key.z,
                     )?;
 
-                    map.iter().for_each(|block| {
-                        let block_index = block.load(Ordering::Relaxed);
-                        if (block_index >= chunk.region_header_data.range.start)
-                            && (block_index <= chunk.region_header_data.range.end)
-                        {
-                            block.store(0, Ordering::Relaxed);
-                            claimed_blocks += 1;
-                        }
-                    });
+                    taken_ranges[(x.0 * 32) + z.0] =
+                        MaybeUninit::new(chunk.region_header_data.range.clone());
 
-                    *z = MaybeUninit::new(RwLock::new(chunk));
+                    *z.1 = MaybeUninit::new(RwLock::new(chunk));
                 }
 
-                *x = MaybeUninit::new(unsafe { transmute::<_, [RwLock<Chunk>; 32]>(z_array) });
+                *x.1 = MaybeUninit::new(unsafe { transmute::<_, [RwLock<Chunk>; 32]>(z_array) });
             }
 
             unsafe { transmute::<_, [[RwLock<Chunk>; 32]; 32]>(x_array) }
         };
 
-        inner_region
-            .data
-            .claimed_blocks
-            .store(claimed_blocks, Ordering::Relaxed);
+        let mut taken_ranges = unsafe { transmute::<_, [Range<u32>; 1024]>(taken_ranges) };
 
-        drop(map);
+        glidesort::sort_by(&mut taken_ranges, |a, b| a.end.cmp(&b.start));
+
+        let mut free_ranges: Vec<AtomicU64> = Vec::with_capacity(1024);
+
+        let mut previous_end: u32 = 1;
+
+        let mut unclaimed_blocks = 0;
+
+        for range in taken_ranges.iter() {
+            let end = range.end;
+            if previous_end != range.start {
+                free_ranges.push(AtomicU64::new(((previous_end as u64) << 32) | (end as u64)));
+            }
+            previous_end = range.end;
+        }
+
+        free_ranges
+            .spare_capacity_mut()
+            .iter_mut()
+            .for_each(|item| {
+                item.write(AtomicU64::new(0));
+
+                unclaimed_blocks += 1;
+            });
+
+        unsafe {
+            free_ranges.set_len(free_ranges.capacity());
+        }
 
         Ok(Region {
-            inner_region,
+            static_metadata: static_region_metadata,
+            mutable_metadata: MutableRegionMetadata {
+                end: AtomicU32::new(end),
+                unclaimed_blocks: AtomicU32::new(unclaimed_blocks),
+                free_ranges: RwLock::new(free_ranges),
+                wanted_end: AtomicU32::new(end),
+            },
             chunks,
         })
     }
 
     pub(crate) fn close(&mut self) -> Result<(), Error> {
-        self.inner_region.file.take().unwrap().close_file()?;
+        self.static_metadata.file.take().unwrap().close_file()?;
 
         Ok(())
     }
@@ -124,7 +131,7 @@ impl Region {
 
         let chunk = &self.chunks[chunk_region_x as usize][chunk_region_z as usize].read();
 
-        let data = chunk.read_chunk_data(&self.inner_region)?;
+        let data = chunk.read_chunk_data(&self.static_metadata)?;
 
         Ok(data)
     }

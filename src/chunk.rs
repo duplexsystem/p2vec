@@ -4,7 +4,7 @@ use std::path::Path;
 
 use crate::compression::CompressionType;
 use crate::memory_mapped_file::MemoryMappedFile;
-use crate::region::InnerRegion;
+use crate::region::StaticRegionMetadata;
 
 pub(crate) struct RegionHeaderData {
     pub(crate) offset: u16,
@@ -33,14 +33,14 @@ pub(crate) struct Chunk {
 }
 
 impl Chunk {
-    pub(crate) fn new_from_inner_region(
-        chunk_region_x: u8,
-        chunk_region_z: u8,
-        region: &InnerRegion,
+    pub(crate) fn new(
+        chunk_region_x: u32,
+        chunk_region_z: u32,
+        static_region_metadata: &StaticRegionMetadata,
         region_x: i32,
         region_z: i32,
     ) -> Result<Self, Error> {
-        let file = region.file.as_ref().unwrap();
+        let file = static_region_metadata.file.as_ref().unwrap();
         let region_header_data =
             Self::read_region_header_data(chunk_region_x, chunk_region_z, file)?;
 
@@ -56,7 +56,7 @@ impl Chunk {
                 4096,
                 Path::new(&format!(
                     "{}/c.{}.{}.mcc",
-                    region.directory, chunk_x, chunk_z
+                    static_region_metadata.directory, chunk_x, chunk_z
                 )),
                 false,
             )?);
@@ -72,8 +72,8 @@ impl Chunk {
     }
 
     fn read_region_header_data(
-        chunk_region_x: u8,
-        chunk_region_z: u8,
+        chunk_region_x: u32,
+        chunk_region_z: u32,
         file: &MemoryMappedFile,
     ) -> Result<RegionHeaderData, Error> {
         let offset = ((chunk_region_x % 32) as u16 + (chunk_region_z % 32) as u16 * 32) * 4;
@@ -134,20 +134,20 @@ impl Chunk {
 
     pub(crate) fn read_chunk_data(
         &self,
-        inner_region: &InnerRegion,
+        static_region_metadata: &StaticRegionMetadata,
     ) -> Result<Option<Vec<u8>>, Error> {
         if self.region_header_data.location <= 1 || self.region_header_data.size == 0 {
             return Ok(None);
         }
 
-        if inner_region.file.is_none() {
+        if static_region_metadata.file.is_none() {
             return Err(Error::new(
                 std::io::ErrorKind::Other,
                 "Region file is not open",
             ));
         }
 
-        let compressed_data = inner_region
+        let compressed_data = static_region_metadata
             .file
             .as_ref()
             .unwrap()
