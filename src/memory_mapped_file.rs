@@ -12,7 +12,8 @@ use crate::{random_file, sequential_file};
 pub(crate) struct MemoryMappedFile {
     file: Box<dyn SpecializedFile + Send + Sync>,
     data: MmapMut,
-    pub(crate) memory_size: usize,
+    memory_size: usize,
+    pub(crate) file_size: usize,
 }
 
 impl MemoryMappedFile {
@@ -42,11 +43,12 @@ impl MemoryMappedFile {
             }
         };
 
-        Ok((MemoryMappedFile {
+        Ok(MemoryMappedFile {
             file,
             data,
             memory_size,
-        }))
+            file_size: memory_size,
+        })
     }
 
     pub(crate) fn close_file(self) -> Result<(), Error> {

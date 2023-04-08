@@ -10,9 +10,9 @@ edition = "2021"
 # Utilites
 once_cell = { version = "1.17.1", features = ["parking_lot"] } # For dynamic dyspatch tables
 parking_lot = { version = "0.12.1", features = ["hardware-lock-elision"] } # Enable faster backed for oncecell
-hashbrown = { version = "0.*", features = ["inline-more"] }
+hashbrown = { version = "0.12.3", features = ["inline-more"] }
 dashmap = "5.4.0"
-ahash = "0.8.3"
+ahash = "0.7.6"
 libc = "0.2.140" # for low level utils
 smallvec = { version = "1.10.0", features = ["write", "union", "const_generics", "const_new"] }
 glidesort = "0.1.2"
@@ -34,7 +34,10 @@ positioned-io = "0.3.1"
 io-uring = { version = "0.5.13", features = ["unstable"] }
 
 [lib]
-#crate_type = ["cdylib"]
+#crate_type = ["dylib"]
 
 [profile.release]
 lto = true
+strip = true
+panic = "abort"
+codegen-units = 1

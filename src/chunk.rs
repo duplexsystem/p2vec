@@ -116,7 +116,7 @@ impl Chunk {
 
         let compression_type = CompressionType::from_u8(data[location + 4]).unwrap();
 
-        let oversized = compression_type_byte == 82;
+        let oversized = compression_type_byte & 128 != 0;
 
         let data_start = location + 5;
         let data_end = location + 4 + length as usize;
@@ -147,11 +147,17 @@ impl Chunk {
             ));
         }
 
-        let compressed_data = static_region_metadata
-            .file
-            .as_ref()
-            .unwrap()
-            .read_file(self.chunk_header_data.data_range.clone())?;
+        let compressed_data = match self.chunk_header_data.oversized {
+            true => {
+                let file = self.data.oversized_data.as_ref().unwrap();
+                file.read_file(0..file.file_size)?
+            }
+            false => static_region_metadata
+                .file
+                .as_ref()
+                .unwrap()
+                .read_file(self.chunk_header_data.data_range.clone())?,
+        };
 
         let data = self
             .chunk_header_data

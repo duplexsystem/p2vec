@@ -35,7 +35,7 @@ impl Region {
             Path::new(&format!("{0}/r.{1}.{2}.mca", key.directory, key.x, key.z)),
             true,
         )?;
-        let end = ((file.memory_size as u32 / 4096) - 2).max(1);
+        let end = ((file.file_size as u32 / 4096) - 2).max(1);
 
         let static_region_metadata = StaticRegionMetadata {
             directory: key.directory,
