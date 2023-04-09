@@ -34,10 +34,10 @@ positioned-io = "0.3.1"
 io-uring = { version = "0.5.13", features = ["unstable"] }
 
 [lib]
-#crate_type = ["dylib"]
+crate_type = ["dylib"]
 
 [profile.release]
 lto = true
-strip = true
+#strip = true
 panic = "abort"
 codegen-units = 1

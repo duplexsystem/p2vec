@@ -9,9 +9,12 @@ rustflags = [
     "-C", "linker=clang",
     "-C", "link-arg=-fuse-ld=mold",
     "-C", "link-arg=-flto",
+    "-C", "panic=abort",
+ #   "-Z", "llvm-plugins=LLVMPolly.so",
+  #  "-C", "passes=polly-canonicalize",
 ]
 
 [env]
 CC = "clang"
 AR = "llvm-ar"
-CFLAGS = "-O3 -fuse-ld=mold -flto"
+CFLAGS = "-O3 -flto -Xclang -load -Xclang LLVMPolly.so -mllvm -polly -mllvm -polly-vectorizer=stripmine"
