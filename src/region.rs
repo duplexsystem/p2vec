@@ -1,10 +1,10 @@
-use glam::IVec2;
 use std::io::Error;
-use std::mem::{transmute, MaybeUninit};
+use std::mem::{MaybeUninit, transmute};
 use std::ops::Range;
 use std::path::Path;
 use std::sync::atomic::{AtomicU32, AtomicU64};
 
+use glam::IVec2;
 use parking_lot::RwLock;
 
 use crate::chunk::Chunk;

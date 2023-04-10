@@ -1,14 +1,16 @@
+use std::io::Error;
+use std::ops::Range;
+use std::path::Path;
+
+use glam::IVec2;
+use parking_lot::{RwLock, RwLockUpgradableReadGuard};
+
 use crate::memory_mapped_file::MemoryMappedFile;
 use crate::region::StaticRegionMetadata;
 use crate::region_file_util::{
     get_chunk_compression_type, get_chunk_length, get_chunk_location, get_chunk_offset,
     get_oversized_status,
 };
-use glam::{IVec2, UVec2};
-use parking_lot::{RwLock, RwLockUpgradableReadGuard};
-use std::io::Error;
-use std::ops::{Deref, Range};
-use std::path::Path;
 
 pub(crate) struct Chunk {
     data: RwLock<Option<MemoryMappedFile>>,

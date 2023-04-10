@@ -1,8 +1,7 @@
+use glam::IVec2;
+
 use crate::compression::CompressionType;
-use crate::memory_mapped_file::MemoryMappedFile;
 use crate::memory_util::{u8x3_to_u32, u8x4_to_u32};
-use glam::{IVec2, UVec2};
-use std::io::Error;
 
 #[inline]
 pub(crate) fn get_region_coords(chunk_coords: IVec2) -> IVec2 {
