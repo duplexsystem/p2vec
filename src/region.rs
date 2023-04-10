@@ -1,5 +1,5 @@
 use std::io::Error;
-use std::mem::{MaybeUninit, transmute};
+use std::mem::{transmute, MaybeUninit};
 use std::ops::Range;
 use std::path::Path;
 use std::sync::atomic::{AtomicU32, AtomicU64};
@@ -131,7 +131,7 @@ impl Region {
             }
             Some(file) => file,
         }
-            .close_file()?;
+        .close_file()?;
 
         Ok(())
     }

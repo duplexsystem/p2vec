@@ -1,8 +1,8 @@
 use std::io::Error;
 
 use ahash::RandomState;
-use dashmap::DashMap;
 use dashmap::mapref::one::Ref;
+use dashmap::DashMap;
 use glam::IVec2;
 use libdeflater::CompressionLvl;
 use once_cell::sync::Lazy;
@@ -87,18 +87,18 @@ pub fn write_chunk(
         }
         Some(compression_type) => compression_type,
     }
-        .compress(
-            data,
-            match CompressionLvl::new(compression_level) {
-                Ok(level) => level,
-                Err(_) => {
-                    return Err(Error::new(
-                        std::io::ErrorKind::Other,
-                        "Invalid compression level",
-                    ));
-                }
-            },
-        )?;
+    .compress(
+        data,
+        match CompressionLvl::new(compression_level) {
+            Ok(level) => level,
+            Err(_) => {
+                return Err(Error::new(
+                    std::io::ErrorKind::Other,
+                    "Invalid compression level",
+                ));
+            }
+        },
+    )?;
 
     let alignment_data = get_alignment_vector(compressed_data.len(), 4096);
     let key = RegionKey {
