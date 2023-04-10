@@ -5,12 +5,13 @@ use crate::region_file_util::{
     get_oversized_status,
 };
 use glam::{IVec2, UVec2};
+use parking_lot::{RwLock, RwLockUpgradableReadGuard};
 use std::io::Error;
-use std::ops::Range;
+use std::ops::{Deref, Range};
 use std::path::Path;
 
 pub(crate) struct Chunk {
-    data: Option<RwLock<MemoryMappedFile>>,
+    data: RwLock<Option<MemoryMappedFile>>,
 }
 
 impl Chunk {
@@ -58,15 +59,17 @@ impl Chunk {
         };
 
         Ok((
-            Chunk { data },
+            Chunk {
+                data: RwLock::new(data),
+            },
             offset..offset + (chunk_region_table_data[4] as usize),
         ))
     }
 
     pub(crate) fn read_chunk_data(
         &self,
+        chunk_coords: IVec2,
         chunk_region_coords: IVec2,
-        region_coords: IVec2,
         static_region_metadata: &StaticRegionMetadata,
     ) -> Result<Option<Vec<u8>>, Error> {
         let file = &static_region_metadata.file;
@@ -78,7 +81,7 @@ impl Chunk {
             ));
         }
 
-        let file = &file.unwrap();
+        let mut file = static_region_metadata.file.as_ref().unwrap();
 
         let location = get_chunk_location(chunk_region_coords) as usize;
 
@@ -96,11 +99,20 @@ impl Chunk {
 
         let oversized = get_oversized_status(compression_byte);
 
+        let file_lock;
+
+        let mut file_write_lock;
+
         let compressed_data = match oversized {
             true => {
-                let file = self.data.unwrap_or_else(|| {
-
-                })
+                file_lock = self.data.upgradable_read();
+                if file_lock.is_none() {
+                    file_write_lock = RwLockUpgradableReadGuard::upgrade(file_lock);
+                    file = file_write_lock.insert(
+                        Chunk::open_oversized_file(static_region_metadata.directory, chunk_coords)
+                            .unwrap(),
+                    );
+                }
                 file.read_file(0..file.file_size)?
             }
             false => {
@@ -121,10 +133,17 @@ impl Chunk {
         Ok(Some(data))
     }
 
-    pub(crate) fn get_oversized_file(
-    chunk_region_coords: IVec2,
-    region_coords: IVec2,
-    ) {
-
+    pub(crate) fn open_oversized_file(
+        directory: &'static str,
+        chunk_coords: IVec2,
+    ) -> Result<MemoryMappedFile, Error> {
+        Ok(MemoryMappedFile::open_file(
+            4096,
+            Path::new(&format!(
+                "{}/c.{}.{}.mcc",
+                directory, chunk_coords.x, chunk_coords.y
+            )),
+            false,
+        )?)
     }
 }

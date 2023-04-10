@@ -28,29 +28,21 @@ mod specialized_file;
 static REGIONS: Lazy<DashMap<RegionKey, Region, RandomState>> =
     Lazy::new(|| DashMap::with_capacity_and_hasher(1, RandomState::default()));
 
-pub(crate) fn open_region_inner(key: RegionKey) -> Ref<'static, RegionKey, Region, RandomState> {
+pub(crate) fn open_region(key: RegionKey) -> Ref<'static, RegionKey, Region, RandomState> {
     REGIONS
         .entry(key)
         .or_insert_with(|| Region::new(&key).unwrap())
         .downgrade()
 }
 
-pub(crate) fn open_region(
+pub(crate) fn get_region(
     key: RegionKey,
 ) -> Result<Ref<'static, RegionKey, Region, RandomState>, Error> {
-    Ok(REGIONS.get(&key).unwrap_or_else(|| open_region_inner(key)))
+    Ok(REGIONS.get(&key).unwrap_or_else(|| open_region(key)))
 }
 
-pub(crate) fn get_region(
-    directory: &'static str,
-    chunk_x: i32,
-    chunk_z: i32,
-) -> Result<Ref<'static, RegionKey, Region, RandomState>, Error> {
-    open_region(get_region_key(directory, chunk_x, chunk_z))
-}
-
-pub fn close_region(directory: &'static str, chunk_x: i32, chunk_z: i32) -> Result<(), Error> {
-    let key = get_region_key(directory, chunk_x, chunk_z);
+pub fn close_region(directory: &'static str, coords: IVec2) -> Result<(), Error> {
+    let key = RegionKey { directory, coords };
 
     let region_option = REGIONS.get_mut(&key);
 
@@ -67,23 +59,19 @@ pub fn close_region(directory: &'static str, chunk_x: i32, chunk_z: i32) -> Resu
     Ok(())
 }
 
-pub fn read_chunk(
-    directory: &'static str,
-    coords: IVec2
-) -> Result<Option<Vec<u8>>, Error> {
-    let region_key = RegionKey {
-        directory
-        
-    }
-    let region = get_region(directory,get_chunk_region_coords(coords))?;
+pub fn read_chunk(directory: &'static str, coords: IVec2) -> Result<Option<Vec<u8>>, Error> {
+    let key = RegionKey {
+        directory,
+        coords: get_chunk_region_coords(coords),
+    };
+    let region = get_region(key)?;
 
-    region.read_chunk(chunk_x, chunk_z)
+    region.read_chunk(coords)
 }
 
 pub fn write_chunk(
     directory: &'static str,
-    chunk_x: i32,
-    chunk_z: i32,
+    coords: IVec2,
     timestamp: u64,
     data: &[u8],
     compression_type: u8,
@@ -94,13 +82,16 @@ pub fn write_chunk(
         .compress(data, CompressionLvl::new(compression_level).unwrap())?;
 
     let alignment_data = get_alignment_vector(compressed_data.len(), 4096);
+    let key = RegionKey {
+        directory,
+        coords: get_chunk_region_coords(coords),
+    };
 
-    let region = get_region(directory, chunk_x, chunk_z)?;
+    let region = get_region(key)?;
 
     region.write_chunk(
         directory,
-        chunk_x,
-        chunk_z,
+        coords,
         timestamp,
         &compressed_data,
         &alignment_data,
