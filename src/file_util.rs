@@ -12,7 +12,7 @@ pub(crate) fn file_advise(file: &File, advice: c_int) -> Result<(), Error> {
     #[cfg(all(unix, target_os = "linux"))]
     unsafe {
         use std::os::fd::AsRawFd;
-        error = libc::posix_fadvise(file.as_raw_fd(), 0, 0, advice);
+        error = libc::posix_fadvise64(file.as_raw_fd(), 0, 0, advice);
     }
 
     match error {
