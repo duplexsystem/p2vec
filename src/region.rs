@@ -2,12 +2,12 @@ use std::io::Error;
 use std::mem::{transmute, MaybeUninit};
 use std::ops::Range;
 use std::path::Path;
-use std::sync::atomic::{AtomicU32, AtomicU64};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 use glam::IVec2;
 use parking_lot::RwLock;
 
-use crate::chunk::Chunk;
+use crate::chunk::{Chunk, ChunkGuard};
 use crate::memory_mapped_file::MemoryMappedFile;
 use crate::region_file_util::get_chunk_region_coords;
 use crate::region_key::RegionKey;
@@ -27,7 +27,7 @@ pub(crate) struct StaticRegionMetadata {
 pub(crate) struct Region {
     static_metadata: StaticRegionMetadata,
     mutable_metadata: MutableRegionMetadata,
-    chunks: [[RwLock<Chunk>; 32]; 32],
+    chunks: [[ChunkGuard; 32]; 32],
 }
 
 impl Region {
@@ -52,12 +52,12 @@ impl Region {
 
         let chunks = {
             // Create an array of uninitialized values.
-            let mut x_array: [MaybeUninit<[RwLock<Chunk>; 32]>; 32] =
+            let mut x_array: [MaybeUninit<[ChunkGuard; 32]>; 32] =
                 unsafe { MaybeUninit::uninit().assume_init() };
 
             for x in x_array.iter_mut().enumerate() {
                 // Create an array of uninitialized values.
-                let mut y_array: [MaybeUninit<RwLock<Chunk>>; 32] =
+                let mut y_array: [MaybeUninit<ChunkGuard>; 32] =
                     unsafe { MaybeUninit::uninit().assume_init() };
 
                 for y in y_array.iter_mut().enumerate() {
@@ -69,13 +69,16 @@ impl Region {
 
                     taken_ranges[(x.0 * 32) + y.0] = MaybeUninit::new(chunk_range);
 
-                    *y.1 = MaybeUninit::new(RwLock::new(chunk));
+                    *y.1 = MaybeUninit::new(ChunkGuard {
+                        chunk: RwLock::new(chunk),
+                        timestamp: AtomicU64::new(0),
+                    });
                 }
 
-                *x.1 = MaybeUninit::new(unsafe { transmute::<_, [RwLock<Chunk>; 32]>(y_array) });
+                *x.1 = MaybeUninit::new(unsafe { transmute::<_, [ChunkGuard; 32]>(y_array) });
             }
 
-            unsafe { transmute::<_, [[RwLock<Chunk>; 32]; 32]>(x_array) }
+            unsafe { transmute::<_, [[ChunkGuard; 32]; 32]>(x_array) }
         };
 
         let mut taken_ranges = unsafe { transmute::<_, [Range<usize>; 1024]>(taken_ranges) };
@@ -139,8 +142,9 @@ impl Region {
     pub(crate) fn read_chunk(&self, chunk_coords: IVec2) -> Result<Option<Vec<u8>>, Error> {
         let chunk_region_coords = get_chunk_region_coords(chunk_coords);
 
-        let chunk =
-            &self.chunks[chunk_region_coords.x as usize][chunk_region_coords.y as usize].read();
+        let chunk = &self.chunks[chunk_region_coords.x as usize][chunk_region_coords.y as usize]
+            .chunk
+            .read();
 
         let data =
             chunk.read_chunk_data(chunk_coords, chunk_region_coords, &self.static_metadata)?;
@@ -150,13 +154,33 @@ impl Region {
 
     pub(crate) fn write_chunk(
         &self,
-        directory: &'static str,
         chunk_coords: IVec2,
         timestamp: u64,
         data: &[u8],
         alignment_data: &[u8],
     ) -> Result<(), Error> {
         let chunk_region_coords = get_chunk_region_coords(chunk_coords);
+
+        let chunk_guard =
+            &self.chunks[chunk_region_coords.x as usize][chunk_region_coords.y as usize];
+
+        if chunk_guard
+            .timestamp
+            .fetch_max(timestamp, Ordering::Relaxed)
+            >= timestamp
+        {
+            return Ok(());
+        }
+
+        chunk_guard.chunk.write().write_chunk_data(
+            chunk_coords,
+            chunk_region_coords,
+            &self.static_metadata,
+            &self.mutable_metadata,
+            timestamp,
+            data,
+            alignment_data,
+        )?;
 
         Ok(())
     }
