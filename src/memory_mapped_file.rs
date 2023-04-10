@@ -13,7 +13,6 @@ pub(crate) struct MemoryMappedFile {
     file: File,
     data: MmapMut,
     memory_size: usize,
-    pub(crate) file_size: usize,
 }
 
 impl MemoryMappedFile {
@@ -45,7 +44,6 @@ impl MemoryMappedFile {
             file,
             data,
             memory_size,
-            file_size: memory_size,
         })
     }
 
@@ -81,5 +79,9 @@ impl MemoryMappedFile {
         self.file.read_at(range.start as u64, &mut data)?;
 
         Ok(Cow::Owned(data))
+    }
+
+    pub(crate) fn get_file_size(&self) -> Result<u64, Error> {
+        Ok(self.file.metadata()?.len())
     }
 }

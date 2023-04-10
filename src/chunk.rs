@@ -115,7 +115,7 @@ impl Chunk {
                             .unwrap(),
                     );
                 }
-                file.read_file(0..file.file_size)?
+                file.read_file(0..file.get_file_size()? as usize)?
             }
             false => {
                 let length_data: &[u8; 4] = &chunk_header_data[0..4].try_into().unwrap();

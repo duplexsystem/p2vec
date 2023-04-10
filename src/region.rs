@@ -1,5 +1,5 @@
 use std::io::Error;
-use std::mem::{MaybeUninit, transmute};
+use std::mem::{transmute, MaybeUninit};
 use std::ops::Range;
 use std::path::Path;
 use std::sync::atomic::{AtomicU32, AtomicU64};
@@ -40,7 +40,7 @@ impl Region {
             )),
             true,
         )?;
-        let end = ((file.file_size as u32 / 4096) - 2).max(1);
+        let end = ((file.get_file_size()? as u32 / 4096) - 2).max(1);
 
         let static_region_metadata = StaticRegionMetadata {
             directory: key.directory,
