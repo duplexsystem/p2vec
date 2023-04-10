@@ -1,8 +1,8 @@
 use std::io::Error;
 
 use ahash::RandomState;
-use dashmap::mapref::one::Ref;
 use dashmap::DashMap;
+use dashmap::mapref::one::Ref;
 use glam::IVec2;
 use libdeflater::CompressionLvl;
 use once_cell::sync::Lazy;
@@ -18,12 +18,9 @@ mod compression;
 mod file_util;
 mod memory_mapped_file;
 mod memory_util;
-mod random_file;
 mod region;
 mod region_file_util;
 mod region_key;
-mod sequential_file;
-mod specialized_file;
 
 static REGIONS: Lazy<DashMap<RegionKey, Region, RandomState>> =
     Lazy::new(|| DashMap::with_capacity_and_hasher(1, RandomState::default()));

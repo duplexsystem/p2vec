@@ -147,6 +147,8 @@ impl Region {
         data: &[u8],
         alignment_data: &[u8],
     ) -> Result<(), Error> {
+        let chunk_region_coords = get_chunk_region_coords(chunk_coords);
+
         Ok(())
     }
 }

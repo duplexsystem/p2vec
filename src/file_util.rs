@@ -7,18 +7,21 @@ use close_err::Closable;
 use fs3::FileExt;
 use libc::c_int;
 
-pub(crate) fn file_advise(file: &File, advice: c_int) {
+pub(crate) fn file_advise(file: &File, advice: c_int) -> Result<(), Error> {
+    let mut error = 0;
     #[cfg(all(unix, target_os = "linux"))]
     unsafe {
         use std::os::fd::AsRawFd;
-        libc::posix_fadvise(file.as_raw_fd(), 0, 0, advice);
+        error = libc::posix_fadvise(file.as_raw_fd(), 0, 0, advice);
+    }
+
+    match error {
+        0 => Ok(()),
+        _ => Err(Error::from_raw_os_error(error)),
     }
 }
 
-pub(crate) fn open_file_with_guaranteed_size(
-    initial_size: usize,
-    path: &Path,
-) -> Result<File, Error> {
+pub(crate) fn open_file(initial_size: usize, path: &Path) -> Result<File, Error> {
     if !path.is_file() {
         fs::create_dir_all(path.parent().unwrap())?;
     }
@@ -31,7 +34,7 @@ pub(crate) fn open_file_with_guaranteed_size(
 
     file.try_lock_exclusive()?;
 
-    file_advise(&file, libc::POSIX_FADV_WILLNEED);
+    file_advise(&file, libc::POSIX_FADV_WILLNEED)?;
 
     file.allocate(initial_size as u64)?;
 
@@ -41,7 +44,5 @@ pub(crate) fn open_file_with_guaranteed_size(
 pub(crate) fn close_file(file: File) -> Result<(), Error> {
     file.unlock()?;
 
-    file.close().unwrap();
-
-    Ok(())
+    file.close()
 }
