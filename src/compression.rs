@@ -53,9 +53,12 @@ impl CompressionType {
                 let mut decompressor = Decompressor::new();
                 let mut outbuf = Vec::new();
                 outbuf.resize(isize, 0);
-                decompressor
-                    .gzip_decompress(data.as_ref(), &mut outbuf)
-                    .unwrap();
+                match decompressor.gzip_decompress(data.as_ref(), &mut outbuf) {
+                    Ok(_) => {}
+                    Err(error) => {
+                        return Err(Error::new(std::io::ErrorKind::Other, error.to_string()));
+                    }
+                }
                 Ok(outbuf)
             }
             // For zlib compression, use the system zlib implementation provided by the `flate2` crate to decompress the data
@@ -84,10 +87,12 @@ impl CompressionType {
                 let max_sz = compressor.gzip_compress_bound(data.len());
                 let mut compressed_data = Vec::new();
                 compressed_data.resize(max_sz, 0);
-                let actual_sz = compressor
-                    .gzip_compress(data, &mut compressed_data)
-                    .unwrap();
-                compressed_data.resize(actual_sz, 0);
+                match compressor.gzip_compress(data, &mut compressed_data) {
+                    Ok(_) => {}
+                    Err(error) => {
+                        return Err(Error::new(std::io::ErrorKind::Other, error.to_string()));
+                    }
+                }
                 Ok(compressed_data)
             }
             // For zlib compression, use libdeflate to compress the data
@@ -96,10 +101,13 @@ impl CompressionType {
                 let max_sz = compressor.zlib_compress_bound(data.len());
                 let mut compressed_data = Vec::new();
                 compressed_data.resize(max_sz, 0);
-                let actual_sz = compressor
-                    .zlib_compress(data, &mut compressed_data)
-                    .unwrap();
-                compressed_data.resize(actual_sz, 0);
+                match compressor.zlib_compress(data, &mut compressed_data) {
+                    Ok(_) => {}
+                    Err(error) => {
+                        return Err(Error::new(std::io::ErrorKind::Other, error.to_string()));
+                    }
+                }
+
                 Ok(compressed_data)
             }
             // For uncompressed data, return a copy of the input data

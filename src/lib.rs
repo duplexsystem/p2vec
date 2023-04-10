@@ -25,29 +25,33 @@ mod region_key;
 static REGIONS: Lazy<DashMap<RegionKey, Region, RandomState>> =
     Lazy::new(|| DashMap::with_capacity_and_hasher(1, RandomState::default()));
 
-pub(crate) fn open_region(key: RegionKey) -> Ref<'static, RegionKey, Region, RandomState> {
-    REGIONS
+pub(crate) fn open_region(
+    key: RegionKey,
+) -> Result<Ref<'static, RegionKey, Region, RandomState>, Error> {
+    Ok(REGIONS
         .entry(key)
-        .or_insert_with(|| Region::new(&key).unwrap())
-        .downgrade()
+        .or_try_insert_with(|| Region::new(&key))?
+        .downgrade())
 }
 
 pub(crate) fn get_region(
     key: RegionKey,
 ) -> Result<Ref<'static, RegionKey, Region, RandomState>, Error> {
-    Ok(REGIONS.get(&key).unwrap_or_else(|| open_region(key)))
+    match REGIONS.get(&key) {
+        Some(region) => Ok(region),
+        None => open_region(key),
+    }
 }
 
 pub fn close_region(directory: &'static str, coords: IVec2) -> Result<(), Error> {
     let key = RegionKey { directory, coords };
 
-    let region_option = REGIONS.get_mut(&key);
+    let region_option = match REGIONS.get_mut(&key) {
+        None => return Ok(()),
+        Some(region_option) => region_option,
+    };
 
-    if region_option.is_none() {
-        return Ok(());
-    }
-
-    let mut region = region_option.unwrap();
+    let mut region = region_option;
 
     region.close()?;
 
@@ -74,9 +78,27 @@ pub fn write_chunk(
     compression_type: u8,
     compression_level: i32,
 ) -> Result<(), Error> {
-    let compressed_data = CompressionType::from_u8(compression_type)
-        .unwrap()
-        .compress(data, CompressionLvl::new(compression_level).unwrap())?;
+    let compressed_data = match CompressionType::from_u8(compression_type) {
+        None => {
+            return Err(Error::new(
+                std::io::ErrorKind::Other,
+                "Invalid compression type",
+            ));
+        }
+        Some(compression_type) => compression_type,
+    }
+        .compress(
+            data,
+            match CompressionLvl::new(compression_level) {
+                Ok(level) => level,
+                Err(_) => {
+                    return Err(Error::new(
+                        std::io::ErrorKind::Other,
+                        "Invalid compression level",
+                    ));
+                }
+            },
+        )?;
 
     let alignment_data = get_alignment_vector(compressed_data.len(), 4096);
     let key = RegionKey {

@@ -19,17 +19,17 @@ pub(crate) fn get_chunk_location(chunk_region_coords: IVec2) -> i32 {
 }
 
 #[inline]
-pub(crate) fn get_chunk_offset(offset_data: &[u8; 3]) -> u32 {
+pub(crate) fn get_chunk_offset(offset_data: &[u8]) -> u32 {
     u8x3_to_u32(offset_data)
 }
 
 #[inline]
-pub(crate) fn get_chunk_length(length_data: &[u8; 4]) -> u32 {
+pub(crate) fn get_chunk_length(length_data: &[u8]) -> u32 {
     u8x4_to_u32(length_data)
 }
 
 #[inline]
-pub(crate) fn get_chunk_timestamp(timestamp_data: &[u8; 4]) -> u32 {
+pub(crate) fn get_chunk_timestamp(timestamp_data: &[u8]) -> u32 {
     u8x4_to_u32(timestamp_data)
 }
 

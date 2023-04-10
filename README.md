@@ -1,7 +1,6 @@
 # p2vec
-TODO:
-better error handling
 
+TODO:
 io-uring backend
 
 writing (important)

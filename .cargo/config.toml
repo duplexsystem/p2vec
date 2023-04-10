@@ -10,8 +10,8 @@ rustflags = [
     "-C", "link-arg=-fuse-ld=mold",
     "-C", "link-arg=-flto",
     "-C", "panic=abort",
- #   "-Z", "llvm-plugins=LLVMPolly.so",
-  #  "-C", "passes=polly-canonicalize",
+    #   "-Z", "llvm-plugins=LLVMPolly.so",
+    #  "-C", "passes=polly-canonicalize",
 ]
 
 [env]

@@ -1,5 +1,5 @@
 use std::io::Error;
-use std::mem::{transmute, MaybeUninit};
+use std::mem::{MaybeUninit, transmute};
 use std::ops::Range;
 use std::path::Path;
 use std::sync::atomic::{AtomicU32, AtomicU64};
@@ -122,7 +122,16 @@ impl Region {
     }
 
     pub(crate) fn close(&mut self) -> Result<(), Error> {
-        self.static_metadata.file.take().unwrap().close_file()?;
+        match self.static_metadata.file.take() {
+            None => {
+                return Err(Error::new(
+                    std::io::ErrorKind::Other,
+                    "Region File can't be closed because it is not open",
+                ));
+            }
+            Some(file) => file,
+        }
+            .close_file()?;
 
         Ok(())
     }

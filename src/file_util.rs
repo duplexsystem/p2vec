@@ -23,7 +23,10 @@ pub(crate) fn file_advise(file: &File, advice: c_int) -> Result<(), Error> {
 
 pub(crate) fn open_file(initial_size: usize, path: &Path) -> Result<File, Error> {
     if !path.is_file() {
-        fs::create_dir_all(path.parent().unwrap())?;
+        fs::create_dir_all(match path.parent() {
+            None => return Err(Error::new(std::io::ErrorKind::Other, "Invalid Directory")),
+            Some(path) => path,
+        })?;
     }
 
     let file = OpenOptions::new()

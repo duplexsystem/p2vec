@@ -22,20 +22,23 @@ impl Chunk {
         region_coords: IVec2,
         static_region_metadata: &StaticRegionMetadata,
     ) -> Result<(Self, Range<usize>), Error> {
-        let file = static_region_metadata.file.as_ref().unwrap();
+        let file = match static_region_metadata.file.as_ref() {
+            None => {
+                return Err(Error::new(
+                    std::io::ErrorKind::Other,
+                    "Region file is not open",
+                ));
+            }
+            Some(file) => file,
+        };
 
-        if static_region_metadata.file.is_none() {
-            return Err(Error::new(
-                std::io::ErrorKind::Other,
-                "Region file is not open",
-            ));
-        }
+        if static_region_metadata.file.is_none() {}
 
         let location = get_chunk_location(chunk_region_coords) as usize;
 
         let chunk_region_table_data = file.read_file(location..location + 4)?;
 
-        let offset_data: &[u8; 3] = chunk_region_table_data[0..3].try_into().unwrap();
+        let offset_data = &chunk_region_table_data[0..3];
 
         let offset = get_chunk_offset(offset_data) as usize;
 
@@ -74,22 +77,19 @@ impl Chunk {
         chunk_region_coords: IVec2,
         static_region_metadata: &StaticRegionMetadata,
     ) -> Result<Option<Vec<u8>>, Error> {
-        let file = &static_region_metadata.file;
-
-        if static_region_metadata.file.is_none() {
-            return Err(Error::new(
-                std::io::ErrorKind::Other,
-                "Region file is not open",
-            ));
-        }
-
-        let mut file = static_region_metadata.file.as_ref().unwrap();
+        let mut file = match &static_region_metadata.file {
+            Some(file) => file,
+            None => {
+                return Err(Error::new(
+                    std::io::ErrorKind::Other,
+                    "Region file is not open",
+                ));
+            }
+        };
 
         let location = get_chunk_location(chunk_region_coords) as usize;
 
-        let chunk_region_table_data: &[u8; 3] = &(file.read_file(location..location + 4)?)[0..3]
-            .try_into()
-            .unwrap();
+        let chunk_region_table_data = &(file.read_file(location..location + 4)?)[0..3];
 
         let offset = get_chunk_offset(chunk_region_table_data) as usize;
 
@@ -97,7 +97,15 @@ impl Chunk {
 
         let compression_byte = chunk_header_data[4];
 
-        let compression_type = get_chunk_compression_type(compression_byte).unwrap();
+        let compression_type = match get_chunk_compression_type(compression_byte) {
+            None => {
+                return Err(Error::new(
+                    std::io::ErrorKind::Other,
+                    "Invalid Compression Type",
+                ));
+            }
+            Some(result) => result,
+        };
 
         let oversized = get_oversized_status(compression_byte);
 
@@ -110,23 +118,19 @@ impl Chunk {
                 file_lock = self.data.upgradable_read();
                 if file_lock.is_none() {
                     file_write_lock = RwLockUpgradableReadGuard::upgrade(file_lock);
-                    file = file_write_lock.insert(
-                        Chunk::open_oversized_file(static_region_metadata.directory, chunk_coords)
-                            .unwrap(),
-                    );
+                    file = file_write_lock.insert(Chunk::open_oversized_file(
+                        static_region_metadata.directory,
+                        chunk_coords,
+                    )?);
                 }
                 file.read_file(0..file.get_file_size()? as usize)?
             }
             false => {
-                let length_data: &[u8; 4] = &chunk_header_data[0..4].try_into().unwrap();
+                let length_data = &chunk_header_data[0..4];
 
                 let length = get_chunk_length(length_data) as usize;
 
-                static_region_metadata
-                    .file
-                    .as_ref()
-                    .unwrap()
-                    .read_file(offset + 5..offset + 5 + length)?
+                file.read_file(offset + 5..offset + 5 + length)?
             }
         };
 

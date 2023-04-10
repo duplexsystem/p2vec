@@ -61,9 +61,7 @@ impl MemoryMappedFile {
 
             vector.resize(range.len(), 0u8);
 
-            vector
-                .write_all(&self.data[range.start..self.memory_size])
-                .unwrap();
+            vector.write_all(&self.data[range.start..self.memory_size])?;
 
             self.file.read_at(
                 (self.memory_size + 1) as u64,
