@@ -1,8 +1,8 @@
 use std::io::Error;
 
 use ahash::RandomState;
-use dashmap::mapref::one::Ref;
 use dashmap::DashMap;
+use dashmap::mapref::one::Ref;
 use glam::IVec2;
 use libdeflater::CompressionLvl;
 use once_cell::sync::Lazy;
@@ -73,7 +73,7 @@ pub fn read_chunk(directory: &'static str, coords: IVec2) -> Result<Option<Vec<u
 pub fn write_chunk(
     directory: &'static str,
     coords: IVec2,
-    timestamp: u64,
+    timestamp: u32,
     data: &[u8],
     compression_type: u8,
     compression_level: i32,
@@ -87,18 +87,18 @@ pub fn write_chunk(
         }
         Some(compression_type) => compression_type,
     }
-    .compress(
-        data,
-        match CompressionLvl::new(compression_level) {
-            Ok(level) => level,
-            Err(_) => {
-                return Err(Error::new(
-                    std::io::ErrorKind::Other,
-                    "Invalid compression level",
-                ));
-            }
-        },
-    )?;
+        .compress(
+            data,
+            match CompressionLvl::new(compression_level) {
+                Ok(level) => level,
+                Err(_) => {
+                    return Err(Error::new(
+                        std::io::ErrorKind::Other,
+                        "Invalid compression level",
+                    ));
+                }
+            },
+        )?;
 
     let alignment_data = get_alignment_vector(compressed_data.len(), 4096);
     let key = RegionKey {
@@ -108,13 +108,7 @@ pub fn write_chunk(
 
     let region = get_region(key)?;
 
-    region.write_chunk(
-        directory,
-        coords,
-        timestamp,
-        &compressed_data,
-        &alignment_data,
-    )?;
+    region.write_chunk(coords, timestamp, &alignment_data, &compressed_data)?;
 
     Ok(())
 }

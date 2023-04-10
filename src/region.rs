@@ -1,5 +1,5 @@
 use std::io::Error;
-use std::mem::{transmute, MaybeUninit};
+use std::mem::{MaybeUninit, transmute};
 use std::ops::Range;
 use std::path::Path;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
@@ -14,9 +14,10 @@ use crate::region_key::RegionKey;
 
 pub(crate) struct MutableRegionMetadata {
     pub(crate) free_ranges: RwLock<Vec<AtomicU64>>,
-    pub(crate) unclaimed_blocks: AtomicU32,
+    pub(crate) free_ranges_to_recycle: RwLock<Vec<AtomicU64>>,
+    pub(crate) unclaimed_ranges: AtomicU32,
     pub(crate) end: AtomicU32,
-    pub(crate) wanted_end: AtomicU32,
+    pub(crate) wanted_space: AtomicU32,
 }
 
 pub(crate) struct StaticRegionMetadata {
@@ -71,7 +72,7 @@ impl Region {
 
                     *y.1 = MaybeUninit::new(ChunkGuard {
                         chunk: RwLock::new(chunk),
-                        timestamp: AtomicU64::new(0),
+                        timestamp: AtomicU32::new(0),
                     });
                 }
 
@@ -83,7 +84,7 @@ impl Region {
 
         let mut taken_ranges = unsafe { transmute::<_, [Range<usize>; 1024]>(taken_ranges) };
 
-        glidesort::sort_by(&mut taken_ranges, |a, b| a.end.cmp(&b.start));
+        glidesort::sort_by(&mut taken_ranges, |a, b| a.start.cmp(&b.start));
 
         let mut free_ranges: Vec<AtomicU64> = Vec::with_capacity(1024);
 
@@ -116,9 +117,10 @@ impl Region {
             static_metadata: static_region_metadata,
             mutable_metadata: MutableRegionMetadata {
                 end: AtomicU32::new(end),
-                unclaimed_blocks: AtomicU32::new(unclaimed_blocks),
+                unclaimed_ranges: AtomicU32::new(unclaimed_blocks),
                 free_ranges: RwLock::new(free_ranges),
-                wanted_end: AtomicU32::new(end),
+                free_ranges_to_recycle: RwLock::new(Vec::new()),
+                wanted_space: AtomicU32::new(end),
             },
             chunks,
         })
@@ -134,7 +136,7 @@ impl Region {
             }
             Some(file) => file,
         }
-        .close_file()?;
+            .close_file()?;
 
         Ok(())
     }
@@ -155,7 +157,7 @@ impl Region {
     pub(crate) fn write_chunk(
         &self,
         chunk_coords: IVec2,
-        timestamp: u64,
+        timestamp: u32,
         data: &[u8],
         alignment_data: &[u8],
     ) -> Result<(), Error> {
