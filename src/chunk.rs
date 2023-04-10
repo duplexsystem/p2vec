@@ -1,144 +1,25 @@
+use crate::memory_mapped_file::MemoryMappedFile;
+use crate::region::StaticRegionMetadata;
+use crate::region_file_util::{
+    get_chunk_compression_type, get_chunk_length, get_chunk_location, get_chunk_offset,
+    get_oversized_status,
+};
+use glam::{IVec2, UVec2};
 use std::io::Error;
 use std::ops::Range;
 use std::path::Path;
 
-use crate::compression::CompressionType;
-use crate::memory_mapped_file::MemoryMappedFile;
-use crate::region::StaticRegionMetadata;
-
-pub(crate) struct RegionHeaderData {
-    pub(crate) offset: u16,
-    pub(crate) location: u32,
-    pub(crate) size: u8,
-    pub(crate) end: u32,
-    pub(crate) range: Range<u32>,
-}
-
-struct ChunkHeaderData {
-    location: usize,
-    length: u32,
-    compression_type: CompressionType,
-    oversized: bool,
-    data_range: Range<usize>,
-}
-
-struct ChunkData {
-    oversized_data: Option<MemoryMappedFile>,
-}
-
 pub(crate) struct Chunk {
-    pub(crate) region_header_data: RegionHeaderData,
-    chunk_header_data: ChunkHeaderData,
-    data: ChunkData,
+    data: Option<RwLock<MemoryMappedFile>>,
 }
 
 impl Chunk {
     pub(crate) fn new(
-        chunk_region_x: u32,
-        chunk_region_z: u32,
+        chunk_region_coords: IVec2,
+        region_coords: IVec2,
         static_region_metadata: &StaticRegionMetadata,
-        region_x: i32,
-        region_z: i32,
-    ) -> Result<Self, Error> {
+    ) -> Result<(Self, Range<usize>), Error> {
         let file = static_region_metadata.file.as_ref().unwrap();
-        let region_header_data =
-            Self::read_region_header_data(chunk_region_x, chunk_region_z, file)?;
-
-        let mut chunk_file: Option<MemoryMappedFile> = None;
-
-        let chunk_header_data = Self::read_chunk_header_data(region_header_data.location, file)?;
-
-        if chunk_header_data.oversized {
-            let chunk_x = region_x << 5 | chunk_region_x as i32;
-            let chunk_z = region_z << 5 | chunk_region_z as i32;
-
-            chunk_file = Some(MemoryMappedFile::open_file(
-                4096,
-                Path::new(&format!(
-                    "{}/c.{}.{}.mcc",
-                    static_region_metadata.directory, chunk_x, chunk_z
-                )),
-                false,
-            )?);
-        }
-
-        Ok(Chunk {
-            region_header_data,
-            chunk_header_data,
-            data: ChunkData {
-                oversized_data: chunk_file,
-            },
-        })
-    }
-
-    fn read_region_header_data(
-        chunk_region_x: u32,
-        chunk_region_z: u32,
-        file: &MemoryMappedFile,
-    ) -> Result<RegionHeaderData, Error> {
-        let offset = ((chunk_region_x % 32) as u16 + (chunk_region_z % 32) as u16 * 32) * 4;
-
-        let data = file.read_file(offset as usize..offset as usize + 3)?;
-
-        let location = ((data[offset as usize] as u32) << 16)
-            | ((data[offset as usize + 1] as u32) << 8)
-            | (data[offset as usize + 2] as u32);
-
-        let size = data[offset as usize + 3];
-
-        let end = location + size as u32;
-
-        let range = location..end;
-
-        Ok(RegionHeaderData {
-            offset,
-            location,
-            size,
-            end,
-            range,
-        })
-    }
-
-    fn read_chunk_header_data(
-        offset: u32,
-        file: &MemoryMappedFile,
-    ) -> Result<ChunkHeaderData, Error> {
-        let location = offset as usize * 4096;
-
-        let data = file.read_file(offset as usize..offset as usize + 4)?;
-
-        let length = ((data[location] as u32) << 24)
-            | ((data[location + 1] as u32) << 16)
-            | ((data[location + 2] as u32) << 8)
-            | (data[location + 3] as u32);
-
-        let compression_type_byte = data[location + 4];
-
-        let compression_type = CompressionType::from_u8(data[location + 4]).unwrap();
-
-        let oversized = compression_type_byte & 128 != 0;
-
-        let data_start = location + 5;
-        let data_end = location + 4 + length as usize;
-
-        let data_range = data_start..data_end;
-
-        Ok(ChunkHeaderData {
-            location,
-            length,
-            compression_type,
-            oversized,
-            data_range,
-        })
-    }
-
-    pub(crate) fn read_chunk_data(
-        &self,
-        static_region_metadata: &StaticRegionMetadata,
-    ) -> Result<Option<Vec<u8>>, Error> {
-        if self.region_header_data.location <= 1 || self.region_header_data.size == 0 {
-            return Ok(None);
-        }
 
         if static_region_metadata.file.is_none() {
             return Err(Error::new(
@@ -147,23 +28,103 @@ impl Chunk {
             ));
         }
 
-        let compressed_data = match self.chunk_header_data.oversized {
+        let location = get_chunk_location(chunk_region_coords) as usize;
+
+        let chunk_region_table_data = file.read_file(location..location + 4)?;
+
+        let offset_data: &[u8; 3] = chunk_region_table_data[0..3].try_into().unwrap();
+
+        let offset = get_chunk_offset(offset_data) as usize;
+
+        let file_offset = offset * 4096;
+
+        let chunk_header_oversized_byte = file.read_file(file_offset + 4..file_offset + 5)?[0];
+
+        let data: Option<MemoryMappedFile> = match get_oversized_status(chunk_header_oversized_byte)
+        {
             true => {
-                let file = self.data.oversized_data.as_ref().unwrap();
-                file.read_file(0..file.file_size)?
+                let chunk_coords: IVec2 = region_coords << 5 | chunk_region_coords;
+
+                Some(MemoryMappedFile::open_file(
+                    4096,
+                    Path::new(&format!(
+                        "{}/c.{}.{}.mcc",
+                        static_region_metadata.directory, chunk_coords.x, chunk_coords.y
+                    )),
+                    false,
+                )?)
             }
-            false => static_region_metadata
-                .file
-                .as_ref()
-                .unwrap()
-                .read_file(self.chunk_header_data.data_range.clone())?,
+            false => None,
         };
 
-        let data = self
-            .chunk_header_data
-            .compression_type
-            .decompress(compressed_data)?;
+        Ok((
+            Chunk { data },
+            offset..offset + (chunk_region_table_data[4] as usize),
+        ))
+    }
+
+    pub(crate) fn read_chunk_data(
+        &self,
+        chunk_region_coords: IVec2,
+        region_coords: IVec2,
+        static_region_metadata: &StaticRegionMetadata,
+    ) -> Result<Option<Vec<u8>>, Error> {
+        let file = &static_region_metadata.file;
+
+        if static_region_metadata.file.is_none() {
+            return Err(Error::new(
+                std::io::ErrorKind::Other,
+                "Region file is not open",
+            ));
+        }
+
+        let file = &file.unwrap();
+
+        let location = get_chunk_location(chunk_region_coords) as usize;
+
+        let chunk_region_table_data: &[u8; 3] = &(file.read_file(location..location + 4)?)[0..3]
+            .try_into()
+            .unwrap();
+
+        let offset = get_chunk_offset(chunk_region_table_data) as usize;
+
+        let chunk_header_data = file.read_file(offset..offset + 5)?;
+
+        let compression_byte = chunk_header_data[4];
+
+        let compression_type = get_chunk_compression_type(compression_byte).unwrap();
+
+        let oversized = get_oversized_status(compression_byte);
+
+        let compressed_data = match oversized {
+            true => {
+                let file = self.data.unwrap_or_else(|| {
+
+                })
+                file.read_file(0..file.file_size)?
+            }
+            false => {
+                let length_data: &[u8; 4] = &chunk_header_data[0..4].try_into().unwrap();
+
+                let length = get_chunk_length(length_data) as usize;
+
+                static_region_metadata
+                    .file
+                    .as_ref()
+                    .unwrap()
+                    .read_file(offset + 5..offset + 5 + length)?
+            }
+        };
+
+        let data = compression_type.decompress(compressed_data)?;
 
         Ok(Some(data))
+    }
+
+    pub(crate) fn get_oversized_file(
+    chunk_region_coords: IVec2,
+    region_coords: IVec2,
+    ) {
+
     }
 }

@@ -1,15 +1,17 @@
 use std::io::Error;
 
 use ahash::RandomState;
-use dashmap::DashMap;
 use dashmap::mapref::one::Ref;
+use dashmap::DashMap;
+use glam::IVec2;
 use libdeflater::CompressionLvl;
 use once_cell::sync::Lazy;
 
 use crate::compression::CompressionType;
 use crate::memory_util::get_alignment_vector;
 use crate::region::Region;
-use crate::region_key::{get_region_key, RegionKey};
+use crate::region_file_util::get_chunk_region_coords;
+use crate::region_key::RegionKey;
 
 mod chunk;
 mod compression;
@@ -18,6 +20,7 @@ mod memory_mapped_file;
 mod memory_util;
 mod random_file;
 mod region;
+mod region_file_util;
 mod region_key;
 mod sequential_file;
 mod specialized_file;
@@ -66,10 +69,13 @@ pub fn close_region(directory: &'static str, chunk_x: i32, chunk_z: i32) -> Resu
 
 pub fn read_chunk(
     directory: &'static str,
-    chunk_x: i32,
-    chunk_z: i32,
+    coords: IVec2
 ) -> Result<Option<Vec<u8>>, Error> {
-    let region = get_region(directory, chunk_x, chunk_z)?;
+    let region_key = RegionKey {
+        directory
+        
+    }
+    let region = get_region(directory,get_chunk_region_coords(coords))?;
 
     region.read_chunk(chunk_x, chunk_z)
 }

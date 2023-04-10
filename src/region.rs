@@ -1,3 +1,4 @@
+use glam::IVec2;
 use std::io::Error;
 use std::mem::{transmute, MaybeUninit};
 use std::ops::Range;
@@ -8,6 +9,7 @@ use parking_lot::RwLock;
 
 use crate::chunk::Chunk;
 use crate::memory_mapped_file::MemoryMappedFile;
+use crate::region_file_util::get_chunk_region_coords;
 use crate::region_key::RegionKey;
 
 pub(crate) struct MutableRegionMetadata {
@@ -32,7 +34,10 @@ impl Region {
     pub(crate) fn new(key: &RegionKey) -> Result<Region, Error> {
         let file = MemoryMappedFile::open_file(
             8192,
-            Path::new(&format!("{0}/r.{1}.{2}.mca", key.directory, key.x, key.z)),
+            Path::new(&format!(
+                "{0}/r.{1}.{2}.mca",
+                key.directory, key.coords.x, key.coords.y
+            )),
             true,
         )?;
         let end = ((file.file_size as u32 / 4096) - 2).max(1);
@@ -42,7 +47,7 @@ impl Region {
             file: Some(file),
         };
 
-        let mut taken_ranges: [MaybeUninit<Range<u32>>; 1024] =
+        let mut taken_ranges: [MaybeUninit<Range<usize>>; 1024] =
             unsafe { MaybeUninit::uninit().assume_init() };
 
         let chunks = {
@@ -52,37 +57,34 @@ impl Region {
 
             for x in x_array.iter_mut().enumerate() {
                 // Create an array of uninitialized values.
-                let mut z_array: [MaybeUninit<RwLock<Chunk>>; 32] =
+                let mut y_array: [MaybeUninit<RwLock<Chunk>>; 32] =
                     unsafe { MaybeUninit::uninit().assume_init() };
 
-                for z in z_array.iter_mut().enumerate() {
-                    let chunk = Chunk::new(
-                        x.0 as u32,
-                        z.0 as u32,
+                for y in y_array.iter_mut().enumerate() {
+                    let (chunk, chunk_range) = Chunk::new(
+                        IVec2::new(x.0 as i32, y.0 as i32),
+                        key.coords,
                         &static_region_metadata,
-                        key.x,
-                        key.z,
                     )?;
 
-                    taken_ranges[(x.0 * 32) + z.0] =
-                        MaybeUninit::new(chunk.region_header_data.range.clone());
+                    taken_ranges[(x.0 * 32) + y.0] = MaybeUninit::new(chunk_range);
 
-                    *z.1 = MaybeUninit::new(RwLock::new(chunk));
+                    *y.1 = MaybeUninit::new(RwLock::new(chunk));
                 }
 
-                *x.1 = MaybeUninit::new(unsafe { transmute::<_, [RwLock<Chunk>; 32]>(z_array) });
+                *x.1 = MaybeUninit::new(unsafe { transmute::<_, [RwLock<Chunk>; 32]>(y_array) });
             }
 
             unsafe { transmute::<_, [[RwLock<Chunk>; 32]; 32]>(x_array) }
         };
 
-        let mut taken_ranges = unsafe { transmute::<_, [Range<u32>; 1024]>(taken_ranges) };
+        let mut taken_ranges = unsafe { transmute::<_, [Range<usize>; 1024]>(taken_ranges) };
 
         glidesort::sort_by(&mut taken_ranges, |a, b| a.end.cmp(&b.start));
 
         let mut free_ranges: Vec<AtomicU64> = Vec::with_capacity(1024);
 
-        let mut previous_end: u32 = 1;
+        let mut previous_end: usize = 1;
 
         let mut unclaimed_blocks = 0;
 
@@ -125,13 +127,14 @@ impl Region {
         Ok(())
     }
 
-    pub(crate) fn read_chunk(&self, chunk_x: i32, chunk_z: i32) -> Result<Option<Vec<u8>>, Error> {
-        let chunk_region_x = (chunk_x & 31) as u8;
-        let chunk_region_z = (chunk_z & 31) as u8;
+    pub(crate) fn read_chunk(&self, chunk_coords: IVec2) -> Result<Option<Vec<u8>>, Error> {
+        let chunk_region_coords = get_chunk_region_coords(chunk_coords);
 
-        let chunk = &self.chunks[chunk_region_x as usize][chunk_region_z as usize].read();
+        let chunk =
+            &self.chunks[chunk_region_coords.x as usize][chunk_region_coords.y as usize].read();
 
-        let data = chunk.read_chunk_data(&self.static_metadata)?;
+        let data =
+            chunk.read_chunk_data(chunk_coords, chunk_region_coords, &self.static_metadata)?;
 
         Ok(data)
     }
@@ -139,8 +142,7 @@ impl Region {
     pub(crate) fn write_chunk(
         &self,
         directory: &'static str,
-        chunk_x: i32,
-        chunk_z: i32,
+        chunk_coords: IVec2,
         timestamp: u64,
         data: &[u8],
         alignment_data: &[u8],
