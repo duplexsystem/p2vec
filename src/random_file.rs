@@ -34,7 +34,7 @@ impl SpecializedFile for RandomFile {
     fn get_file_size(self) -> Result<(Box<dyn SpecializedFile + Send + Sync>, usize), Error> {
         let file = self.file.try_into_inner().unwrap();
         let size = file.metadata()?.len() as usize;
-        return Ok((Box::new(specialize_file(file)?), size));
+        Ok((Box::new(specialize_file(file)?), size))
     }
 }
 

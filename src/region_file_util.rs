@@ -16,7 +16,7 @@ pub(crate) fn get_chunk_region_coords(chunk_coords: IVec2) -> IVec2 {
 
 #[inline]
 pub(crate) fn get_chunk_location(chunk_region_coords: IVec2) -> i32 {
-    (4 * ((chunk_region_coords.x) + (chunk_region_coords.y) * 32))
+    4 * ((chunk_region_coords.x) + (chunk_region_coords.y) * 32)
 }
 
 #[inline]

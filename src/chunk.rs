@@ -137,13 +137,13 @@ impl Chunk {
         directory: &'static str,
         chunk_coords: IVec2,
     ) -> Result<MemoryMappedFile, Error> {
-        Ok(MemoryMappedFile::open_file(
+        MemoryMappedFile::open_file(
             4096,
             Path::new(&format!(
                 "{}/c.{}.{}.mcc",
                 directory, chunk_coords.x, chunk_coords.y
             )),
             false,
-        )?)
+        )
     }
 }

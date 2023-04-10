@@ -23,7 +23,7 @@ impl SpecializedFile for SequentialFile {
 
     fn get_file_size(self) -> Result<(Box<dyn SpecializedFile + Send + Sync>, usize), Error> {
         let size = self.file.metadata()?.len() as usize;
-        return Ok((Box::new(self), size));
+        Ok((Box::new(self), size))
     }
 }
 
