@@ -1,5 +1,6 @@
+use concurrent_queue::{ConcurrentQueue, PushError};
 use std::io::Error;
-use std::mem::{MaybeUninit, transmute};
+use std::mem::{transmute, MaybeUninit};
 use std::ops::Range;
 use std::path::Path;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
@@ -13,11 +14,9 @@ use crate::region_file_util::get_chunk_region_coords;
 use crate::region_key::RegionKey;
 
 pub(crate) struct MutableRegionMetadata {
-    pub(crate) free_ranges: RwLock<Vec<AtomicU64>>,
-    pub(crate) free_ranges_to_recycle: RwLock<Vec<AtomicU64>>,
-    pub(crate) unclaimed_ranges: AtomicU32,
-    pub(crate) end: AtomicU32,
+    pub(crate) free_ranges: Box<[ConcurrentQueue<Range<u32>>; 256]>,
     pub(crate) wanted_space: AtomicU32,
+    pub(crate) modify_lock: RwLock<()>,
 }
 
 pub(crate) struct StaticRegionMetadata {
@@ -84,43 +83,18 @@ impl Region {
 
         let mut taken_ranges = unsafe { transmute::<_, [Range<usize>; 1024]>(taken_ranges) };
 
+        let mut free_ranges = Vec::with_capacity(256);
+
+        free_ranges.fill_with(ConcurrentQueue::<Range<u32>>::unbounded);
+
         glidesort::sort_by(&mut taken_ranges, |a, b| a.start.cmp(&b.start));
-
-        let mut free_ranges: Vec<AtomicU64> = Vec::with_capacity(1024);
-
-        let mut previous_end: usize = 1;
-
-        let mut unclaimed_blocks = 0;
-
-        for range in taken_ranges.iter() {
-            let end = range.end;
-            if previous_end != range.start {
-                free_ranges.push(AtomicU64::new(((previous_end as u64) << 32) | (end as u64)));
-            }
-            previous_end = range.end;
-        }
-
-        free_ranges
-            .spare_capacity_mut()
-            .iter_mut()
-            .for_each(|item| {
-                item.write(AtomicU64::new(0));
-
-                unclaimed_blocks += 1;
-            });
-
-        unsafe {
-            free_ranges.set_len(free_ranges.capacity());
-        }
 
         Ok(Region {
             static_metadata: static_region_metadata,
             mutable_metadata: MutableRegionMetadata {
-                end: AtomicU32::new(end),
-                unclaimed_ranges: AtomicU32::new(unclaimed_blocks),
-                free_ranges: RwLock::new(free_ranges),
-                free_ranges_to_recycle: RwLock::new(Vec::new()),
+                free_ranges: Box::try_from(free_ranges.into_boxed_slice()).unwrap(),
                 wanted_space: AtomicU32::new(end),
+                modify_lock: RwLock::new(()),
             },
             chunks,
         })
@@ -136,7 +110,7 @@ impl Region {
             }
             Some(file) => file,
         }
-            .close_file()?;
+        .close_file()?;
 
         Ok(())
     }
